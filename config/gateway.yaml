@@ -1,5 +1,5 @@
 # Gateway configuration. Environment variables OPENAI_API_KEY / ANTHROPIC_API_KEY enable hosted tiers.
-router_pair: local_qwen             # trained difficulty model in models/ (local_qwen: trained on the local pair's own labels)
+router_pair: gpt35_vs_gpt4         # trained difficulty model in models/ (see README: the router trained on only 240 local labels learned nothing useful)
 eval_pair: gpt35_vs_gpt4            # offline RouterBench evaluation shown in the UI
 tiers:
   small: {provider: local, model: Qwen/Qwen2.5-0.5B-Instruct, price_as: gpt-6-luna}

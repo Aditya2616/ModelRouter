@@ -38,6 +38,7 @@ SOURCES = {
 }
 N_PER = 60
 LETTERS = "ABCDE"
+PREFIX = "The correct answer is"   # forced start of the reply; the models then emit the letter
 DATA = Path("data/live")
 
 
@@ -105,7 +106,7 @@ def run_models(items: pd.DataFrame, out: Path = DATA / "runs.parquet", threads: 
         t0 = time.time()
         for i in range(len(items)):
             it = items.iloc[i]
-            c = prov.complete(model, [{"role": "user", "content": it.prompt}], max_tokens=4, temperature=0.0)
+            c = prov.complete(model, [{"role": "user", "content": it.prompt}], max_tokens=4, temperature=0.0, prefix=PREFIX)
             recs.append({f"{tag}_text": c.text, f"{tag}_ok": float(parse_letter(c.text) == it.gold),
                          f"{tag}_latency": c.latency_s,
                          f"{tag}_logprob": c.mean_logprob if c.mean_logprob is not None else np.nan,

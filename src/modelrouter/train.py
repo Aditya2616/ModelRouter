@@ -55,7 +55,7 @@ def make_models(kind: str):
         return CalibratedClassifierCV(base, method="isotonic", cv=3), slice(None)
     if kind == "rf":
         base = RandomForestClassifier(n_estimators=200, min_samples_leaf=4, max_features="sqrt",
-                                      n_jobs=-1, random_state=SEED)
+                                      n_jobs=3, random_state=SEED)
         return CalibratedClassifierCV(base, method="isotonic", cv=3), slice(None)
     if kind == "mlp":
         base = make_pipeline(StandardScaler(), MLPClassifier((128,), alpha=1e-2, early_stopping=True,

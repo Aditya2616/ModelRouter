@@ -17,7 +17,7 @@ def main(argv: list[str] | None = None) -> int:
     t.add_argument("--pair", default="gpt35_vs_gpt4", choices=["gpt35_vs_gpt4", "mixtral_vs_gpt4"])
     t.add_argument("--fast", action="store_true", help="logistic regression + gradient boosting only")
 
-    sub.add_parser("live", help="run the local Qwen small/big experiment (about 800 questions)")
+    sub.add_parser("live", help="run the local Qwen small/big experiment (240 questions, about 25 min on CPU)")
 
     r = sub.add_parser("route", help="print the predicted difficulty of a prompt")
     r.add_argument("prompt")

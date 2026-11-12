@@ -35,14 +35,20 @@ class LocalProvider:
         return self._models[model]
 
     def complete(self, model: str, messages: list[Message], max_tokens: int = 256,
-                 temperature: float = 0.0) -> Completion:
+                 temperature: float = 0.0, prefix: str = "") -> Completion:
+        """`prefix` is forced as the start of the assistant turn (the returned text excludes it). The live
+        experiment uses it so a short multiple-choice answer is not cut off mid-sentence."""
         import torch
 
         with self._lock:
             tok, lm = self._load(model)
             t0 = time.perf_counter()
-            ids = tok.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt",
-                                          return_dict=True)
+            if prefix:
+                text_in = tok.apply_chat_template(messages, add_generation_prompt=True, tokenize=False) + prefix
+                ids = tok(text_in, return_tensors="pt")
+            else:
+                ids = tok.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt",
+                                              return_dict=True)
             n_prompt = ids["input_ids"].shape[1]
             gen_kwargs = {"max_new_tokens": max_tokens, "return_dict_in_generate": True,
                           "output_scores": True, "pad_token_id": tok.eos_token_id}

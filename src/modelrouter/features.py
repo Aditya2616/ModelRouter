@@ -34,11 +34,12 @@ def lexical(prompts: Sequence[str]) -> np.ndarray:
             float(bool(_MATH_RE.search(p))), float(bool(_OPTION_RE.search(p))),
             sum(len(w) for w in words) / nw, max((len(w) for w in words), default=0),
             sum(ord(c) > 127 for c in p) / n, len(re.findall(r"[.!?](\s|$)", p)),
-            float(bool(_NUMWORDS.search(p))), float("\(" in p or "\frac" in p or "$" in p),
+            float(bool(_NUMWORDS.search(p))), float("\\(" in p or "\\frac" in p or "$" in p),
         ])
     return np.asarray(rows, dtype=np.float32)
 
 
+CHUNK = 2048
 _embedder = None
 
 
@@ -70,8 +71,20 @@ def featurize(prompts: Sequence[str], cache: Path | None = None, progress: bool 
         e = np.load(cache)
         if len(e) == len(prompts):
             return np.hstack([e, lexical(prompts)])
-    e = embed(prompts, progress=progress)
-    if cache is not None:
-        cache.parent.mkdir(exist_ok=True)
-        np.save(cache, e)
+    if cache is None:
+        return np.hstack([embed(prompts, progress=progress), lexical(prompts)])
+    # Long runs are checkpointed in chunks so an interrupted job resumes instead of restarting.
+    cache.parent.mkdir(exist_ok=True)
+    parts = []
+    for k, start in enumerate(range(0, len(prompts), CHUNK)):
+        part = cache.with_name(f"{cache.stem}.part{k:03d}.npy")
+        if not part.exists():
+            np.save(part, embed(prompts[start:start + CHUNK], progress=False))
+            if progress:
+                print(f"  embedded {min(start + CHUNK, len(prompts))}/{len(prompts)}", flush=True)
+        parts.append(part)
+    e = np.vstack([np.load(p) for p in parts])
+    np.save(cache, e)
+    for p in parts:
+        p.unlink()
     return np.hstack([e, lexical(prompts)])
