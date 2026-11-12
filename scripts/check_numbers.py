@@ -50,8 +50,9 @@ def load() -> dict:
     off = {p: json.loads((ROOT / "results" / f"offline_{p}.json").read_text(encoding="utf-8")) for p in PAIRS}
     pred = {p: pd.read_parquet(ROOT / "results" / f"test_predictions_{p}.parquet") for p in PAIRS}
     live = json.loads((ROOT / "results" / "live.json").read_text(encoding="utf-8"))
+    dup = json.loads((ROOT / "results" / "duplicates.json").read_text(encoding="utf-8"))
     pricing = yaml.safe_load((ROOT / "config" / "pricing.yaml").read_text(encoding="utf-8"))
-    return {"off": off, "pred": pred, "live": live, "pricing": pricing}
+    return {"off": off, "pred": pred, "live": live, "pricing": pricing, "dup": dup}
 
 
 def operating_point(pred: pd.DataFrame, frac: float) -> dict:
@@ -72,6 +73,9 @@ def operating_point(pred: pd.DataFrame, frac: float) -> dict:
 def values(D: dict) -> tuple[dict[str, str], dict[str, str]]:
     off, pred, live, pr = D["off"], D["pred"], D["live"], D["pricing"]
     v: dict[str, str] = {}
+    dup = D["dup"]
+    assert dup["duplicate_rows"] == 0 and dup["n_prompts"] == off[PAIRS[0]]["n_total"]
+    v.update(dup_keys=f"{dup['n_unique_keys']:,}", dup_rows=str(dup["duplicate_rows"]))
     blocks: dict[str, str] = {}
     a, b = off[PAIRS[0]], off[PAIRS[1]]
     ta, tb = a["test"], b["test"]

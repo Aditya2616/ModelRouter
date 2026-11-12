@@ -32,7 +32,7 @@
   <section id="stream-sec">
     <div class="sec-head">
       <h2>Requests <em>split by difficulty</em></h2>
-      <div class="sec-note" id="stream-note">Each dot is a real held-out prompt. It is routed at the diamond with the current threshold.</div>
+      <div class="sec-note" id="stream-note">Each dot is a real held-out prompt, placed on the router's difficulty axis and sent to the lane the threshold picks. The readouts under the chart use every held-out prompt and update instantly.</div>
     </div>
     <div class="grid2">
       <div>
@@ -40,10 +40,16 @@
           <canvas id="stream" aria-label="Animation of requests being routed to the small or the big model"></canvas>
           <div class="stage-bar">
             <button class="btn primary" id="play-btn" aria-pressed="true">Pause</button>
-            <button class="btn" id="speed-btn">1x</button>
+            <span class="seg" role="group" aria-label="Stream speed"><button class="btn" data-speed="1" aria-pressed="true">1x</button><button class="btn" data-speed="4" aria-pressed="false">4x</button><button class="btn" data-speed="16" aria-pressed="false">16x</button></span>
             <button class="btn" id="reset-btn">Reset meter</button>
             <span class="spacer"></span>
             <span class="mono sec-note" id="stream-count"></span>
+          </div>
+          <div class="legend stream-legend" aria-label="Dot colours">
+            <span class="dot" style="--c:var(--lime)">routed right</span>
+            <span class="dot" style="--c:var(--bone)">big needed</span>
+            <span class="dot" style="--c:var(--ember)">misroute</span>
+            <span class="ring" style="--c:var(--ember)">wasted spend</span>
           </div>
         </div>
         <div class="slider-box panel" style="margin-top:14px">

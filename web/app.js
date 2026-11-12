@@ -98,7 +98,16 @@ async function boot() {
   initThreshold(); stream.init(); initTables(); initPlayground(); drawAllCharts();
   const ro = new ResizeObserver(() => { stream.resize(); drawAllCharts(); });
   ro.observe($("#stream")); ro.observe($("#curve")); ro.observe($("#live-curve"));
+  setupFades();
   update();
+}
+
+/* tables scroll sideways inside their own container; an edge fade shows there is more */
+function setupFades() {
+  document.querySelectorAll(".tablewrap").forEach((w) => {
+    const f = () => { w.classList.toggle("fade-l", w.scrollLeft > 4); w.classList.toggle("fade-r", w.scrollLeft + w.clientWidth < w.scrollWidth - 4); };
+    w.addEventListener("scroll", f, { passive: true }); new ResizeObserver(f).observe(w); f();
+  });
 }
 
 /* ---------- threshold control ---------- */
@@ -134,25 +143,55 @@ function update() {
   drawAllCharts();
 }
 
-/* ---------- stream canvas ---------- */
+/* ---------- stream canvas ----------
+   A seeded, continuous flow of real held-out prompts. Each dot enters from the left, slides to its predicted
+   difficulty on the router column, pauses there, then travels to the lane the threshold picks. On arrival it is
+   coloured from the recorded outcomes of both models:
+     lime   routed right      sent small and the small model was right
+     bone   big needed        sent big and the big model did better (or both failed)
+     ember  misroute          sent small where only the big model was right
+     ring   wasted spend      sent big where the small model was already right */
 const stream = (() => {
+  const SPEEDS = [1, 4, 16], RATE = 13, TRAVEL = 0.42, MAX_PARTS = 420;
   let cv, ctx, W = 0, H = 0, dpr = 1, C = colors(), playing = true, speed = 1, visible = true, raf = 0, last = 0;
-  let parts = [], acc = 0, order = [], cursor = 0, feed = [], boxFlash = [0, 0], thr = 0.5, seed = 12345;
-  const tot = { n: 0, small: 0, big: 0, cost: 0, bigCost: 0, q: 0, bigQ: 0, miss: 0 };
+  let parts = [], acc = 0, order = [], cursor = 0, feed = [], boxFlash = [0, 0], thr = 0.5, seed = 12345, pmin = 0, pmax = 1;
+  const tot = { n: 0, small: 0, big: 0, cost: 0, bigCost: 0, q: 0, bigQ: 0, miss: 0, waste: 0 };
   const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-  const geo = () => ({ R: [W * 0.34, H * 0.5], SM: [W * 0.8, H * 0.24], LG: [W * 0.8, H * 0.74] });
+  const geo = () => ({ RX: W * 0.4, top: H * 0.12, bot: H * 0.88, SM: [W * 0.85, H * 0.2], LG: [W * 0.85, H * 0.8] });
+  const yOf = (p, g) => g.top + clamp((p - pmin) / (pmax - pmin || 1), 0, 1) * (g.bot - g.top);
   function bez(a, u) { const v = 1 - u; return v * v * v * a[0] + 3 * v * v * u * a[1] + 3 * v * u * u * a[2] + u * u * u * a[3]; }
+  function laneXY(g, y0, lane, u, k) { // u: 0..1 along the lane path from the router column
+    const B = lane === 1 ? g.LG : g.SM;
+    return [bez([g.RX, g.RX + 60 * k, B[0] - 90 * k, B[0] - 44 * k], u), bez([y0, y0, B[1], B[1]], u)];
+  }
+  function outcome(i, big) {
+    const e = S.ev, s = e.sq[i], b = e.bq[i];
+    if (!big) return s >= 0.5 && s >= b ? "ok" : s < b ? "miss" : "fail";
+    return s >= 0.5 && s >= b ? "waste" : "need";
+  }
   function init() {
     cv = $("#stream"); ctx = cv.getContext("2d");
     const n = S.ev.n; order = Array.from({ length: n }, (_, i) => i);
+    let lo = 1, hi = 0; for (let i = 0; i < n; i++) { lo = Math.min(lo, S.ev.p[i]); hi = Math.max(hi, S.ev.p[i]); }
+    pmin = lo; pmax = hi;
     for (let i = n - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
     $("#play-btn").addEventListener("click", () => { playing = !playing; sync(); });
-    $("#speed-btn").addEventListener("click", () => { speed = speed === 1 ? 2 : speed === 2 ? 4 : speed === 4 ? 0.5 : 1; $("#speed-btn").textContent = speed + "x"; });
+    document.querySelectorAll("[data-speed]").forEach((b) => b.addEventListener("click", () => {
+      speed = +b.dataset.speed;
+      document.querySelectorAll("[data-speed]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    }));
     $("#reset-btn").addEventListener("click", reset);
     new IntersectionObserver((es) => { visible = es[0].isIntersecting; loop(); }, { threshold: 0.05 }).observe(cv);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) loop(); });
-    if (reduceMotion) { playing = false; $("#play-btn").disabled = true; $("#speed-btn").disabled = true; staticFill(); }
-    sync(); resize(); loop();
+    if (reduceMotion) {
+      playing = false; $("#play-btn").disabled = true;
+      document.querySelectorAll("[data-speed]").forEach((b) => (b.disabled = true));
+      staticFill();
+    }
+    thr = S.threshold;
+    sync(); resize();
+    if (!reduceMotion) for (let k = 0; k < 70; k++) advance(0.05); // start mid-flow, not empty
+    loop();
   }
   function sync() { const b = $("#play-btn"); b.textContent = playing ? "Pause" : "Play"; b.setAttribute("aria-pressed", String(playing)); loop(); }
   function resize() {
@@ -163,29 +202,31 @@ const stream = (() => {
     draw();
   }
   function recolor() { C = colors(); draw(); }
-  function reset() { Object.keys(tot).forEach((k) => (tot[k] = 0)); parts = []; feed = []; meter(); if (reduceMotion) staticFill(); draw(); }
-  function staticFill() { // reduced motion: show the whole held-out set routed at the current threshold, no animation
-    Object.keys(tot).forEach((k) => (tot[k] = 0));
+  function clearTotals() { Object.keys(tot).forEach((k) => (tot[k] = 0)); }
+  function reset() { clearTotals(); parts = []; feed = []; meter(); if (reduceMotion) staticFill(); draw(); }
+  function staticFill() { // reduced motion: the settled state, the whole held-out set routed at the current threshold
+    clearTotals(); feed = [];
     for (let i = 0; i < S.ev.n; i++) land(i, S.ev.p[i] >= thr, true);
     meter();
   }
   function spawn() {
     const i = order[cursor++ % order.length];
-    parts.push({ i, p: 0, y0: H * (0.18 + 0.64 * rand()), lane: -1, miss: false });
+    parts.push({ i, p: 0, y0: H * (0.1 + 0.8 * rand()), big: false, lane: -1, yR: 0, blend: 1, from: null, oc: "" });
   }
   function land(i, big, silent) {
-    const e = S.ev;
+    const e = S.ev, oc = outcome(i, big);
     tot.n++; big ? tot.big++ : tot.small++;
     tot.cost += big ? e.bc[i] : e.sc[i]; tot.q += big ? e.bq[i] : e.sq[i];
     tot.bigCost += e.bc[i]; tot.bigQ += e.bq[i];
-    const miss = !big && e.sq[i] < e.bq[i]; if (miss) tot.miss++;
+    if (oc === "miss") tot.miss++; if (oc === "waste") tot.waste++;
     if (!silent) {
       boxFlash[big ? 1 : 0] = 1;
       const fam = e.d.families[e.d.fam[i]];
-      feed.unshift({ t: `${fam}  d=${e.p[i].toFixed(2)} -> ${big ? "big" : "small"}${miss ? "  small wrong, big right" : ""}`, miss, age: 0 });
+      const tag = oc === "miss" ? "  misroute" : oc === "waste" ? "  wasted" : "";
+      feed.unshift({ t: `${fam}  d=${e.p[i].toFixed(2)} > ${big ? "big" : "small"}${tag}`, bad: oc === "miss" || oc === "waste" });
       feed.length = Math.min(feed.length, 3);
     }
-    return miss;
+    return oc;
   }
   function meter() {
     const per = tot.n || 1;
@@ -197,9 +238,24 @@ const stream = (() => {
     $("#st-qual").textContent = tot.n ? pct(tot.q / tot.bigQ, 1) : "0%";
     $("#st-big").textContent = tot.n ? pct(tot.big / tot.n, 0) : "0%";
     $("#st-miss").textContent = tot.miss;
-    $("#stream-count").textContent = tot.n + " requests";
+    $("#stream-count").textContent = tot.n.toLocaleString() + " requests";
   }
-  function setThreshold(t) { thr = t; if (reduceMotion && S.ev) { staticFill(); draw(); } }
+  let meterDirty = false;
+  function setThreshold(t) {
+    thr = t;
+    if (!S.ev || !cv) return;
+    if (reduceMotion) { staticFill(); draw(); return; }
+    clearTotals(); meterDirty = true;     // the meter restarts so it always reflects the current threshold
+    const g = geo(), k = clamp(W / 700, 0.62, 1.15);
+    for (const q of parts) { // dots already on their way to a lane are re-routed from where they are
+      if (q.lane < 0) continue;
+      const lane = S.ev.p[q.i] >= thr ? 1 : 0;
+      if (lane !== q.lane && q.p < 0.9) {
+        const u = ease(clamp((q.p - 0.55) / 0.45, 0, 1));
+        q.from = laneXY(g, q.yR, q.lane, u, k); q.blend = 0; q.lane = lane; q.big = lane === 1;
+      }
+    }
+  }
   function loop() {
     cancelAnimationFrame(raf);
     if (!playing || !visible || document.hidden || reduceMotion) { draw(); return; }
@@ -212,55 +268,77 @@ const stream = (() => {
     raf = requestAnimationFrame(step);
   }
   function advance(dt) {
-    acc += dt * speed * 4.5;
-    while (acc >= 1) { acc -= 1; if (parts.length < 60) spawn(); }
+    const sdt = dt * speed;
+    acc += sdt * RATE;
+    while (acc >= 1) { acc -= 1; if (parts.length < MAX_PARTS) spawn(); }
+    const g = geo();
     for (const q of parts) {
-      const was = q.p; q.p += dt * speed * 0.5;
-      if (was < 0.5 && q.p >= 0.5) q.lane = S.ev.p[q.i] >= thr ? 1 : 0;
+      const was = q.p; q.p += sdt * TRAVEL;
+      if (was < 0.55 && q.p >= 0.55) { q.big = S.ev.p[q.i] >= thr; q.lane = q.big ? 1 : 0; q.yR = yOf(S.ev.p[q.i], g); q.oc = outcome(q.i, q.big); }
+      if (q.blend < 1) q.blend = Math.min(1, q.blend + dt * 4);
     }
     let landed = false;
-    parts = parts.filter((q) => { if (q.p >= 1) { land(q.i, q.lane === 1); landed = true; return false; } return true; });
-    if (landed) meter();
-    boxFlash[0] = Math.max(0, boxFlash[0] - dt * 2.5); boxFlash[1] = Math.max(0, boxFlash[1] - dt * 2.5);
-    feed.forEach((f) => (f.age += dt));
+    parts = parts.filter((q) => { if (q.p >= 1) { land(q.i, q.big); landed = true; return false; } return true; });
+    if (landed || meterDirty) { meter(); meterDirty = false; }
+    boxFlash[0] = Math.max(0, boxFlash[0] - dt * 3); boxFlash[1] = Math.max(0, boxFlash[1] - dt * 3);
   }
-  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+  function fit(text, maxW) { // truncate with an ellipsis so log lines never clip
+    if (ctx.measureText(text).width <= maxW) return text;
+    while (text.length > 4 && ctx.measureText(text + "...").width > maxW) text = text.slice(0, -1);
+    return text + "...";
+  }
+  const OC = (oc) => (oc === "ok" ? C.lime : oc === "miss" ? C.ember : oc === "waste" ? C.ember : C.bone);
+  function dot(x, y, r, oc, a) {
+    ctx.globalAlpha = a;
+    if (oc === "waste") { ctx.strokeStyle = C.ember; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y, r + 0.8, 0, 6.2832); ctx.stroke(); }
+    else { ctx.fillStyle = OC(oc); ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); }
+    ctx.globalAlpha = 1;
+  }
   function draw() {
     if (!ctx || !W) return;
-    const { R, SM, LG } = geo(), k = clamp(W / 700, 0.62, 1.15);
+    const g = geo(), k = clamp(W / 700, 0.62, 1.15), { RX, top, bot, SM, LG } = g;
     ctx.clearRect(0, 0, W, H);
-    ctx.setLineDash([3 * k, 5 * k]); ctx.lineWidth = 1; ctx.strokeStyle = withAlpha(C.bone, 0.18);
-    for (const B of [SM, LG]) { ctx.beginPath(); ctx.moveTo(R[0], R[1]); ctx.bezierCurveTo(R[0] + 70 * k, R[1], B[0] - 100 * k, B[1], B[0] - 40 * k, B[1]); ctx.stroke(); }
+    // lane guides
+    ctx.setLineDash([3 * k, 5 * k]); ctx.lineWidth = 1; ctx.strokeStyle = withAlpha(C.bone, 0.12);
+    for (const [B, y0] of [[SM, top], [LG, bot]]) { ctx.beginPath(); ctx.moveTo(RX, y0); ctx.bezierCurveTo(RX + 60 * k, y0, B[0] - 90 * k, B[1], B[0] - 44 * k, B[1]); ctx.stroke(); }
     ctx.setLineDash([]);
+    // router column with the difficulty axis and the threshold line
+    ctx.strokeStyle = withAlpha(C.bone, 0.22); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(RX, top - 8); ctx.lineTo(RX, bot + 8); ctx.stroke();
+    const ty = yOf(thr, g);
+    ctx.strokeStyle = C.lime; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(RX - 22 * k, ty); ctx.lineTo(RX + 22 * k, ty); ctx.stroke();
+    ctx.fillStyle = C.lime; ctx.beginPath(); ctx.moveTo(RX + 22 * k, ty); ctx.lineTo(RX + 30 * k, ty - 4); ctx.lineTo(RX + 30 * k, ty + 4); ctx.fill();
+    const mono = (px) => `${Math.round(px * k + 1)}px "JetBrains Mono", monospace`;
+    ctx.font = mono(9); ctx.textAlign = "center"; ctx.fillStyle = C.dim;
+    ctx.fillText("ROUTER", RX, top - 14); ctx.fillText("easy", RX - 28 * k, top + 4); ctx.fillText("hard", RX - 28 * k, bot + 4);
+    ctx.textAlign = "left"; ctx.fillStyle = C.lime; ctx.fillText("t=" + thr.toFixed(2), RX + 34 * k, ty + 4);
+    // dots
     for (const q of parts) {
-      let x, y; const d = S.ev.p[q.i];
-      if (q.p < 0.5) { const u = ease(q.p / 0.5); x = -6 + (R[0] + 6) * u; y = q.y0 + (R[1] - q.y0) * u; }
+      const d = S.ev.p[q.i], r = (2.1 + d * 2.6) * k;
+      let x, y, oc = "", a = 0.85;
+      if (q.p < 0.3) { const u = ease(q.p / 0.3); x = -6 + (RX + 6) * u; y = q.y0 + (yOf(d, g) - q.y0) * u; a = 0.45 + 0.4 * u; }
+      else if (q.p < 0.55) { x = RX; y = yOf(d, g); const w = (q.p - 0.3) / 0.25; ctx.fillStyle = withAlpha(C.lime, 0.2 * Math.sin(w * Math.PI)); ctx.beginPath(); ctx.arc(x, y, r + 5 * k, 0, 6.2832); ctx.fill(); }
       else {
-        const B = q.lane === 1 ? LG : SM, u = ease((q.p - 0.5) / 0.5);
-        x = bez([R[0], R[0] + 70 * k, B[0] - 100 * k, B[0] - 40 * k], u); y = bez([R[1], R[1], B[1], B[1]], u);
+        const u = ease((q.p - 0.55) / 0.45);
+        [x, y] = laneXY(g, q.yR, q.lane, u, k);
+        if (q.blend < 1 && q.from) { const b = ease(q.blend); x = q.from[0] + (x - q.from[0]) * b; y = q.from[1] + (y - q.from[1]) * b; }
+        if (u > 0.7) oc = q.oc; // the outcome shows on arrival
       }
-      const r = (1.8 + d * 4.2) * k;
-      ctx.fillStyle = q.p < 0.5 ? withAlpha(C.bone, 0.45 + 0.4 * d) : q.lane === 1 ? C.bone : C.lime;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
+      dot(x, y, r, oc || "need", oc ? 1 : a);
+      if (!oc) { /* neutral until it arrives: bone */ }
     }
-    // router diamond
-    ctx.save(); ctx.translate(R[0], R[1]); ctx.rotate(Math.PI / 4);
-    ctx.fillStyle = withAlpha(C.bg, 1); ctx.fillRect(-14 * k, -14 * k, 28 * k, 28 * k);
-    ctx.strokeStyle = C.lime; ctx.lineWidth = 1.5; ctx.strokeRect(-14 * k, -14 * k, 28 * k, 28 * k); ctx.restore();
-    ctx.font = `${Math.round(9 * k + 1)}px "JetBrains Mono", monospace`; ctx.textAlign = "center"; ctx.fillStyle = C.dim;
-    ctx.fillText("ROUTER", R[0], R[1] + 32 * k); ctx.fillText("t = " + thr.toFixed(2), R[0], R[1] + 46 * k);
+    // lane boxes
     const boxes = [[SM, "SMALL", S.off.small, tot.small, C.lime, 0], [LG, "BIG", S.off.big, tot.big, C.bone, 1]];
     for (const [B, lab, model, n, col, bi] of boxes) {
-      const bw = 86 * k, bh = 46 * k;
-      ctx.fillStyle = withAlpha(col, 0.08 + boxFlash[bi] * 0.3); rr(B[0] - bw / 2, B[1] - bh / 2, bw, bh, 9 * k); ctx.fill();
+      const bw = 88 * k, bh = 46 * k;
+      ctx.fillStyle = withAlpha(col, 0.08 + boxFlash[bi] * 0.3); ctx.beginPath(); ctx.roundRect(B[0] - bw / 2, B[1] - bh / 2, bw, bh, 9 * k); ctx.fill();
       ctx.strokeStyle = col; ctx.lineWidth = 1.2; ctx.stroke();
-      ctx.fillStyle = C.bone; ctx.font = `600 ${Math.round(15 * k)}px "Inter Tight", sans-serif`; ctx.fillText(String(n), B[0], B[1] + 5 * k);
-      ctx.font = `${Math.round(9 * k + 1)}px "JetBrains Mono", monospace`; ctx.fillStyle = C.dim;
-      ctx.fillText(lab, B[0], B[1] + bh / 2 + 13 * k);
-      ctx.fillText(model.replace("gpt-", "gpt-").slice(0, 22), B[0], B[1] + bh / 2 + 25 * k);
+      ctx.textAlign = "center"; ctx.fillStyle = C.bone; ctx.font = `600 ${Math.round(15 * k)}px "Inter Tight", sans-serif`; ctx.fillText(n.toLocaleString(), B[0], B[1] + 5 * k);
+      ctx.font = mono(9); ctx.fillStyle = C.dim;
+      ctx.fillText(lab, B[0], B[1] + bh / 2 + 13 * k); ctx.fillText(model.slice(0, 22), B[0], B[1] + bh / 2 + 25 * k);
     }
-    ctx.textAlign = "left"; ctx.font = `${Math.round(9.5 * k + 1)}px "JetBrains Mono", monospace`;
-    feed.forEach((f, i) => { ctx.fillStyle = f.miss ? C.ember : C.dim; ctx.globalAlpha = clamp(1 - i * 0.3, 0.3, 1); ctx.fillText(f.t, 12, H - 12 - i * 15 * k); });
+    // log, bottom left, never wider than the canvas
+    ctx.textAlign = "left"; ctx.font = mono(9.5);
+    feed.forEach((f, i) => { ctx.fillStyle = f.bad ? C.ember : C.dim; ctx.globalAlpha = clamp(1 - i * 0.3, 0.3, 1); ctx.fillText(fit(f.t, W - 24), 12, H - 12 - i * 15 * k); });
     ctx.globalAlpha = 1;
   }
   return { init, resize, recolor, setThreshold, draw, tot };
@@ -433,7 +511,7 @@ function buildItemList() {
   const d = S.ev.d, ids = Object.keys(d.text).map(Number).slice(0, 80);
   if (!ids.length) return;
   $("#items-panel").hidden = false;
-  $("#items-panel .sec-note").textContent += " · prompt text from " + Object.values(d.attribution || {}).join(" and ") + ", shortened";
+  $("#items-panel .sec-note").textContent += " · prompt text, shortened: " + Object.values(d.attribution || {}).join(" · ");
   const list = $("#item-list");
   ids.forEach((i) => {
     const b = document.createElement("button"); b.className = "item"; b.setAttribute("aria-pressed", "false");

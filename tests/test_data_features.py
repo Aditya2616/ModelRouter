@@ -50,3 +50,12 @@ def test_build_slim_from_synthetic_pickle(tmp_path):
     assert out.exists() and len(slim) == n and slim.prompt.iloc[0] == "q0"
     assert not any("response" in c for c in slim.columns)  # responses are dropped
     assert data.pair_arrays(slim)["b_cost"].shape == (n,)
+
+
+def test_prompt_key_uses_the_real_gsm8k_question_and_normalises():
+    shots = "Question: a? \nAnswer: 1\n\nQuestion: b? \nAnswer: 2\n\n\n"
+    a = data.prompt_key(shots + "How  many apples?", "gsm8k")
+    b = data.prompt_key("TASK x\n" + shots + "how many apples?", "gsm8k")
+    assert a == b == "how many apples?"
+    assert data.prompt_key("Foo   Bar", "mmlu") == "foo bar"
+    assert data.prompt_key(shots + "Other question", "gsm8k") != a

@@ -20,17 +20,15 @@ sys.path.insert(0, str(ROOT / "src"))
 from modelrouter import data as D  # noqa: E402
 
 PAIR = "gpt35_vs_gpt4"
-REDISTRIBUTABLE = {"mmlu": "MMLU, MIT", "gsm8k": "GSM8K, MIT"}  # licence shown on each dataset card
+REDISTRIBUTABLE = {"mmlu": "MMLU (Hendrycks et al., MIT licence)", "gsm8k": "GSM8K (Cobbe et al., MIT licence)"}  # licence shown on each dataset card
 OUT = ROOT / "web" / "data"
 
 
 def snippet(prompt: str, family: str) -> str:
     """Pull the question out of the benchmark prompt template and shorten it."""
-    p = prompt.strip()
-    if family == "gsm8k":
-        # keep only the final question of the few-shot template
-        q = p.rsplit("Question:", 1)[-1].split("Answer:")[0].strip()
-        return q[:200]
+    p = D.question_text(prompt, family)
+    if family == "gsm8k":  # the real question follows the few-shot block of solved examples
+        return " ".join(p.split())[:240]
     for cut in ("Please answer with the letter of the correct answer.", "Print only a single choice"):
         p = p.replace(cut, "")
     p = " ".join(p.split())
@@ -53,9 +51,16 @@ def main() -> None:
     text: dict[str, str] = {}
     for f in REDISTRIBUTABLE:
         ids = np.flatnonzero(pred.family.to_numpy() == f)
-        for i in rng.permutation(ids)[:16]:
-            sid = pred.sample_id.iloc[int(i)]
-            text[str(int(i))] = snippet(slim.loc[sid, "prompt"], f)
+        seen: set[str] = set()
+        for i in rng.permutation(ids):
+            if len(seen) == 16:
+                break
+            raw = slim.loc[pred.sample_id.iloc[int(i)], "prompt"]
+            key = D.prompt_key(raw, f)
+            if key in seen:  # never show the same prompt twice
+                continue
+            seen.add(key)
+            text[str(int(i))] = snippet(raw, f)
     r5 = lambda s: [round(float(x), 5) for x in s]  # noqa: E731
     doc = {
         "pair": PAIR, "n": len(pred), "p": r5(pred.p_hard), "sq": r5(pred.s_score), "bq": r5(pred.b_score),

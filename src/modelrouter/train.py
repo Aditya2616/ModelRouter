@@ -101,6 +101,9 @@ def run(pair: str = "gpt35_vs_gpt4", kinds=None, targets=("gain", "small_fail"),
         out_dir: Path = Path("results"), model_dir: Path = Path("models"), log=print) -> dict:
     kinds = kinds or KINDS
     df = D.load_slim()
+    keys = [D.prompt_key(p, f) for p, f in zip(df.prompt, df.family, strict=True)]
+    if len(set(keys)) != len(keys):  # a duplicated prompt could land on both sides of the split
+        raise RuntimeError("duplicate prompts found: group the train/test split by modelrouter.data.prompt_key")
     X = featurize(df.prompt.tolist(), cache=Path("data/emb_routerbench.npy"))
     arr = D.pair_arrays(df, pair)
     o_all = ev.Outcomes(**arr)

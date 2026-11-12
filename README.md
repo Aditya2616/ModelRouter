@@ -39,7 +39,7 @@ Design notes and the research behind the choices are in [`docs/notes/`](docs/not
 
 ### Offline: RouterBench recorded outcomes (the main evidence)
 
-Headline pair A: `<!--v:small_a-->gpt-3.5-turbo-1106<!--/v-->` (small) against `<!--v:big_a-->gpt-4-1106-preview<!--/v-->` (big). Costs are RouterBench's recorded per-call costs at **November 2023** prices, kept separate from the current list prices in `config/pricing.yaml`. The data is split by prompt, stratified by sub-benchmark: <!--v:n_dev-->31,008<!--/v--> development prompts and <!--v:n_test-->5,473<!--/v--> held-out test prompts, which were scored once. The classifier is chosen by out-of-fold APGR on the development data: a <!--v:classifier-->calibrated random forest predicting that the small model gets the prompt wrong<!--/v-->. Features are all-MiniLM-L6-v2 embeddings plus <!--v:n_lexical-->16<!--/v--> lexical statistics, computed on the CPU in float32.
+Headline pair A: `<!--v:small_a-->gpt-3.5-turbo-1106<!--/v-->` (small) against `<!--v:big_a-->gpt-4-1106-preview<!--/v-->` (big). Costs are RouterBench's recorded per-call costs at **November 2023** prices, kept separate from the current list prices in `config/pricing.yaml`. The data is split by prompt, stratified by sub-benchmark: <!--v:n_dev-->31,008<!--/v--> development prompts and <!--v:n_test-->5,473<!--/v--> held-out test prompts, which were scored once. No prompt can sit on both sides of the split: comparing prompts by a normalised key (lower case, single spaces, and for GSM8K the real question after the shared few-shot block) gives <!--v:dup_keys-->36,481<!--/v--> unique keys for <!--v:n_total-->36,481<!--/v--> prompts, <!--v:dup_rows-->0<!--/v--> duplicates (`scripts/check_duplicates.py`; `train` refuses to run if that stops being true), so grouping the split by prompt changes nothing and the numbers below did not need re-running. The classifier is chosen by out-of-fold APGR on the development data: a <!--v:classifier-->calibrated random forest predicting that the small model gets the prompt wrong<!--/v-->. Features are all-MiniLM-L6-v2 embeddings plus <!--v:n_lexical-->16<!--/v--> lexical statistics, computed on the CPU in float32.
 
 <!--BEGIN:offline_a-->
 | Held-out test, pair A | value |
@@ -185,7 +185,7 @@ Run `scripts/embed_routerbench.py` first, otherwise `train` embeds the prompts i
 
 ### Static demo
 
-`docs/` is the same interface with recorded data, ready for GitHub Pages: `python -m http.server -d docs 8109`. It ships only derived per-item numbers (predicted difficulty, each tier's recorded score and cost, task label). Prompt text is shown for a few dozen items from MMLU and GSM8K, whose dataset cards give an MIT licence, shortened and attributed; every other item shows its task label only. `scripts/screenshot.py` checks the page at 1440x900 and 390x844 (touch).
+`docs/` is the same interface with recorded data, ready for GitHub Pages: `python -m http.server -d docs 8109`. It ships only derived per-item numbers (predicted difficulty, each tier's recorded score and cost, task label). Prompt text is shown only for sources whose dataset card gives a licence that permits redistribution, shortened, with an attribution line in the page: MMLU (Hendrycks et al., MIT licence) and GSM8K (Cobbe et al., MIT licence). Every other item shows its task label only. `scripts/screenshot.py` checks the page at 1440x900 and 390x844 (touch).
 
 ![Phone](docs/assets/served-phone-top.png)
 

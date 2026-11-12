@@ -52,6 +52,21 @@ def family(eval_name: str) -> str:
     return "other"
 
 
+def question_text(prompt: str, fam: str) -> str:
+    """The part of a prompt that is the actual question. GSM8K prompts carry a few-shot block of solved
+    examples, then the real question after a blank-line gap."""
+    p = prompt.strip()
+    if fam == "gsm8k":
+        p = p.rsplit("\n\n\n", 1)[-1]
+    return p
+
+
+def prompt_key(prompt: str, fam: str) -> str:
+    """Normalised identity of a prompt (question text, lower case, single spaces), used to make sure no
+    prompt can appear on both sides of a split."""
+    return " ".join(question_text(prompt, fam).lower().split())
+
+
 def clean_prompt(p) -> str:
     """RouterBench stores each prompt as the string form of a one-element list; return the real text."""
     if isinstance(p, (list, tuple)):

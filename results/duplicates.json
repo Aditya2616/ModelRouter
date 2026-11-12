@@ -1,0 +1,16 @@
+{
+ "n_prompts": 36481,
+ "n_unique_keys": 36481,
+ "duplicate_rows": 0,
+ "duplicate_rows_by_family": {
+  "arc-challenge": 0,
+  "gsm8k": 0,
+  "hellaswag": 0,
+  "mbpp": 0,
+  "mmlu": 0,
+  "mt-bench": 0,
+  "other": 0,
+  "winogrande": 0
+ },
+ "note": "key = normalised question text; exact duplicate prompts were already dropped when the data was loaded"
+}
