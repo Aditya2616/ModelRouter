@@ -52,8 +52,14 @@ def embedder(device: str = "cpu"):
     return _embedder
 
 
+def shorten(p: str, head: int = 300, tail: int = 600) -> str:
+    """The embedder reads about 256 tokens. Long prompts (few-shot templates) carry the actual question at
+    the end, so keep the start and the end rather than only the start."""
+    return p if len(p) <= head + tail + 20 else p[:head] + " ... " + p[-tail:]
+
+
 def embed(prompts: Sequence[str], batch_size: int = 64, progress: bool = False) -> np.ndarray:
-    vecs = embedder().encode(list(prompts), batch_size=batch_size, normalize_embeddings=True,
+    vecs = embedder().encode([shorten(p) for p in prompts], batch_size=batch_size, normalize_embeddings=True,
                              show_progress_bar=progress, convert_to_numpy=True)
     return vecs.astype(np.float32)
 

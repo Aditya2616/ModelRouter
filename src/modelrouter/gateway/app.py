@@ -219,7 +219,8 @@ def _sse(resp: dict):
     OpenAI SDK streaming clients working; it is not token-by-token generation."""
     base = {"id": resp["id"], "object": "chat.completion.chunk", "created": resp["created"], "model": resp["model"]}
     text = resp["choices"][0]["message"]["content"]
-    yield "data: " + json.dumps({**base, "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]}) + "\n\n"
+    first = {**base, "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]}
+    yield "data: " + json.dumps(first) + "\n\n"
     step = 24
     for i in range(0, len(text), step):
         chunk = {**base, "choices": [{"index": 0, "delta": {"content": text[i:i + step]}, "finish_reason": None}]}

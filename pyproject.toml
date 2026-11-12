@@ -30,7 +30,8 @@ markers = ["slow: needs model downloads or long training (deselect with -m 'not 
 addopts = "-m 'not slow'"
 
 [tool.ruff]
-line-length = 110
+line-length = 130
 src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+per-file-ignores = { "scripts/*" = ["E501"] }

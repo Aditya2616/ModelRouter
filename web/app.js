@@ -14,6 +14,7 @@ async function getJSON(path) {
   return r.json();
 }
 async function detectBackend() {
+  if (document.querySelector('meta[name="mr-mode"]')?.content === "static") return false; // docs/ build: no backend
   try {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 1500);
@@ -342,7 +343,6 @@ function initTables() {
     row(["AUC (classifier)", fmt(t.auc)]) + row(["APGR", fmt(t.apgr)]) + row(["CPT 90% / 95% / 99%", `${pct(t.cpt90)} / ${pct(t.cpt95)} / ${pct(t.cpt99)}`]) +
     row(["AIQ (random = " + fmt(t.aiq_random, 3) + ")", fmt(t.aiq, 3)]) + row(["Oracle CPT 95%", pct(o.test_oracle.cpt95)]) + "</tbody>";
   const adv = o.test_advantage_vs_random;
-  $("#curve-note").dataset.base = "";
   // CV table
   const sel = o.selected, rows = [];
   for (const [k, m] of Object.entries(o.cv)) {

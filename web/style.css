@@ -69,6 +69,7 @@ h2 em { font-family: var(--serif); font-style: italic; font-weight: 400; }
 .btn:hover { border-color: var(--lime); }
 .btn.primary { background: var(--lime); color: var(--on-lime); border-color: var(--lime); font-weight: 600; }
 .btn[aria-pressed="true"] { border-color: var(--lime); color: var(--lime); }
+.btn.primary[aria-pressed="true"] { color: var(--on-lime); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .spacer { flex: 1; }
 
