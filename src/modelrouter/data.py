@@ -7,6 +7,7 @@ runtime and never redistributed from this repository.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import urllib.request
 from pathlib import Path
@@ -52,6 +53,21 @@ def family(eval_name: str) -> str:
     return "other"
 
 
+def clean_prompt(p) -> str:
+    """RouterBench stores each prompt as the string form of a one-element list; return the real text."""
+    if isinstance(p, (list, tuple)):
+        return "\n".join(str(x) for x in p)
+    s = str(p)
+    if s[:2] in ("['", '["') and s[-2:] in ("']", '"]'):
+        try:
+            v = ast.literal_eval(s)
+        except (ValueError, SyntaxError):
+            return s
+        if isinstance(v, (list, tuple)):
+            return "\n".join(str(x) for x in v)
+    return s
+
+
 def sha256_of(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -77,7 +93,7 @@ def build_slim(raw: Path = RAW, out: Path = SLIM) -> pd.DataFrame:
     """Load through the allow-list unpickler and keep only what routing needs (no responses)."""
     with open(raw, "rb") as f:
         df = safe_load(f)
-    keep = pd.DataFrame({"sample_id": df["sample_id"].astype(str), "prompt": df["prompt"],
+    keep = pd.DataFrame({"sample_id": df["sample_id"].astype(str), "prompt": df["prompt"].map(clean_prompt),
                          "task": df["eval_name"]})
     keep["family"] = keep["task"].map(family)
     for m in MODELS:

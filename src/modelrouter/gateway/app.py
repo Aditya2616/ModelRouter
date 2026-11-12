@@ -123,7 +123,7 @@ def create_app(gateway: Gateway | None = None, eval_store: EvalStore | None = No
 
     def evals() -> EvalStore:
         if state["eval"] is None:
-            pair = (state["cfg"] or {}).get("router_pair", "gpt35_vs_gpt4")
+            pair = (state["cfg"] or {}).get("eval_pair", "gpt35_vs_gpt4")
             try:
                 state["eval"] = EvalStore(pair, ROOT / "results")
             except FileNotFoundError:
