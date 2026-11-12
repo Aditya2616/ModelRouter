@@ -9,6 +9,7 @@ from modelrouter.safepickle import UnsafePickleError, safe_load
 
 def test_loads_plain_dataframe():
     df = pd.DataFrame({"prompt": pd.Series(["a", "b"], dtype=object), "score": [0.0, 1.0]})
+    df.columns = pd.Index(["prompt", "score"], dtype=object)
     out = safe_load(io.BytesIO(pickle.dumps(df)))
     assert out.equals(df)
 
