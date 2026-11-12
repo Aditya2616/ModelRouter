@@ -1,6 +1,6 @@
 """Small live experiment on this machine: a local small/big pair (Qwen2.5-0.5B and 1.5B Instruct).
 
-800 multiple-choice questions with known answers (ARC-Easy, ARC-Challenge, CommonsenseQA, MMLU; 200 each)
+240 multiple-choice questions with known answers (ARC-Easy, ARC-Challenge, CommonsenseQA, MMLU; 60 each)
 are answered by both models through the same provider code the gateway uses. Their real correctness
 becomes the training signal for a router for this pair. This is a CPU-scale demonstration of the
 mechanism; the offline RouterBench analysis is the main evidence.
@@ -36,7 +36,7 @@ SOURCES = {
     "commonsenseqa": ("tau/commonsense_qa", "data/validation-00000-of-00001.parquet"),
     "mmlu": ("cais/mmlu", "all/test-00000-of-00001.parquet"),
 }
-N_PER = 200
+N_PER = 60
 LETTERS = "ABCDE"
 DATA = Path("data/live")
 
@@ -90,30 +90,32 @@ def parse_letter(text: str) -> str | None:
     return m.group(1) if m else None
 
 
-def run_models(items: pd.DataFrame, out: Path = DATA / "runs.parquet", threads: int = 6, log=print) -> pd.DataFrame:
-    """Answer every item with both models (resumable). Records answer, correctness, latency, logprob."""
-    prov = LocalProvider(threads=threads)
-    done = pd.read_parquet(out) if out.exists() else pd.DataFrame()
-    start = len(done)
-    recs = done.to_dict("records")
-    t0 = time.time()
-    for i in range(start, len(items)):
-        it = items.iloc[i]
-        row = {"i": i, "source": it.source, "gold": it.gold}
-        for tag, model in (("s", SMALL), ("b", BIG)):
+def run_models(items: pd.DataFrame, out: Path = DATA / "runs.parquet", threads: int = 3, log=print) -> pd.DataFrame:
+    """Answer every item with both models, one model in memory at a time (the machine is memory-bound).
+    Resumable per model: results are checkpointed to `out`. Records answer, correctness, latency, logprob."""
+    import gc
+
+    runs = pd.read_parquet(out) if out.exists() else pd.DataFrame({"i": range(len(items)), "source": items.source.values,
+                                                                      "gold": items.gold.values})
+    for tag, model in (("s", SMALL), ("b", BIG)):
+        if f"{tag}_ok" in runs.columns and runs[f"{tag}_ok"].notna().all():
+            continue
+        prov = LocalProvider(threads=threads)
+        recs = []
+        t0 = time.time()
+        for i in range(len(items)):
+            it = items.iloc[i]
             c = prov.complete(model, [{"role": "user", "content": it.prompt}], max_tokens=4, temperature=0.0)
-            letter = parse_letter(c.text)
-            row[f"{tag}_text"] = c.text
-            row[f"{tag}_ok"] = float(letter == it.gold)
-            row[f"{tag}_latency"] = c.latency_s
-            row[f"{tag}_logprob"] = c.mean_logprob if c.mean_logprob is not None else np.nan
-            row[f"{tag}_tokens"] = c.prompt_tokens
-        recs.append(row)
-        if (i + 1) % 25 == 0:
-            pd.DataFrame(recs).to_parquet(out, index=False)
-            log(f"  {i + 1}/{len(items)} items, {time.time() - t0:.0f}s")
-    runs = pd.DataFrame(recs)
-    runs.to_parquet(out, index=False)
+            recs.append({f"{tag}_text": c.text, f"{tag}_ok": float(parse_letter(c.text) == it.gold),
+                         f"{tag}_latency": c.latency_s,
+                         f"{tag}_logprob": c.mean_logprob if c.mean_logprob is not None else np.nan,
+                         f"{tag}_tokens": c.prompt_tokens})
+            if (i + 1) % 20 == 0:
+                log(f"  {model.split('/')[1]}: {i + 1}/{len(items)} items, {time.time() - t0:.0f}s")
+        runs = pd.concat([runs, pd.DataFrame(recs)], axis=1)
+        runs.to_parquet(out, index=False)
+        del prov
+        gc.collect()
     return runs
 
 
