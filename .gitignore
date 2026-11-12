@@ -4,8 +4,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
-data/
-models/
+/data/
+/models/
 *.joblib
 *.npy
 *.sqlite
