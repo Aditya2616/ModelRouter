@@ -21,7 +21,6 @@ _ALLOWED_EXACT = {
     ("builtins", "frozenset"),
     ("collections", "OrderedDict"),
     ("_codecs", "encode"),
-    ("pyarrow.lib", "_restore_array"),  # pandas 3 string columns; builds an array from buffers
 }
 # Names that sit inside the allowed packages but can read files, run code or import modules.
 _DENIED_NAMES = {
