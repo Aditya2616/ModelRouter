@@ -1,23 +1,28 @@
-# Editable price table. Prices change often: check the provider pages before trusting any number here.
-# Looked up on 2026-11-12 from the public pricing pages (standard tier, text, prompts under the long-context limit):
-#   OpenAI:    https://developers.openai.com/api/docs/pricing
-#   Anthropic: see the pricing page in the API documentation
+# Editable price table. Provider prices change often: this file is meant to be edited, so check the
+# provider's pricing page and update it before trusting any number here.
+# Looked up on 2026-11-12 from the public pricing page (standard tier, text, short-context prices):
+#   OpenAI: https://developers.openai.com/api/docs/pricing
+# Anthropic: see the pricing page in Anthropic's API documentation and fill in the model you use (template below).
 # Units: US dollars per 1,000,000 tokens.
+# These are current list prices and are kept separate from RouterBench's recorded costs, which are late-2023
+# prices and live in results/*.json.
 price_date: "2026-11-12"
 unit: usd_per_million_tokens
 note: "Provider prices change. These were correct on price_date only. Edit this file to match your contract."
 models:
-  # hosted, OpenAI
-  gpt-6-luna:     {provider: openai,    input: 0.10, output: 0.50}
-  gpt-6.1-sol:    {provider: openai,    input: 2.00, output: 10.00}
-  gpt-5.4-mini:   {provider: openai,    input: 0.75, output: 4.50}
-  gpt-5.4-nano:   {provider: openai,    input: 0.20, output: 1.25}
-  gpt-5.5:        {provider: openai,    input: 5.00, output: 30.00}
-  gpt-4o-mini:    {provider: openai,    input: 0.15, output: 0.60}
-  gpt-4.1:        {provider: openai,    input: 2.00, output: 8.00}
-  # hosted, Anthropic
-  # local models cost no API dollars. Use `price_as` in gateway.yaml to show what the same tokens would
-  # cost on a hosted tier (a labelled hypothetical, never a measured bill).
+  # OpenAI: default small / big example pair
+  gpt-6-luna:     {provider: openai, input: 0.10, output: 0.50}
+  gpt-6.1-sol:    {provider: openai, input: 2.00, output: 10.00}
+  # OpenAI: alternatives
+  # gpt-5.4-nano:   {provider: openai, input: 0.20, output: 1.25}
+  # gpt-5.4-mini:   {provider: openai, input: 0.75, output: 4.50}
+  # gpt-4o-mini:    {provider: openai, input: 0.15, output: 0.60}
+  # gpt-4.1:        {provider: openai, input: 2.00, output: 8.00}
+  # gpt-5.5:        {provider: openai, input: 5.00, output: 30.00}   # prompts under 272K tokens
+  # Anthropic: copy this template once per model you use, and fill in the prices from the pricing page.
+  # <your-anthropic-model-id>: {provider: anthropic, input: 0.0, output: 0.0}
+  # Local models cost no API dollars. `price_as` in gateway.yaml prices the same tokens as a hosted tier
+  # (a labelled hypothetical, never a measured bill).
   Qwen/Qwen2.5-0.5B-Instruct: {provider: local, input: 0.0, output: 0.0}
   Qwen/Qwen2.5-1.5B-Instruct: {provider: local, input: 0.0, output: 0.0}
   stub-small: {provider: stub, input: 0.10, output: 0.50}

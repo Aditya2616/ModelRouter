@@ -373,7 +373,8 @@ function initTables() {
       `${fmt(L[n].advantage_vs_random["30%"].mean, 3)} [${fmt(L[n].advantage_vs_random["30%"].lo, 3)}, ${fmt(L[n].advantage_vs_random["30%"].hi, 3)}]`]));
     pick("router_cv", "router (5-fold CV)"); pick("source_prior", "benchmark identity only"); pick("routerbench_transfer", "RouterBench router, transferred");
     $("#live-table").innerHTML = head(["router", "AUC", "APGR", "CPT95", "vs random @30%"]) + "<tbody>" + rows2.join("") + "</tbody>";
-    $("#live-note").textContent = `${L.n} multiple-choice questions, ${L.small.split("/")[1]} accuracy ${pct(L.accuracy.small, 1)}, ${L.big.split("/")[1]} ${pct(L.accuracy.big, 1)}, oracle ${pct(L.accuracy.oracle, 1)}. Mean latency ${fmt(L.mean_latency_s.small, 2)} s vs ${fmt(L.mean_latency_s.big, 2)} s per question on CPU. The cost proxy is compute (parameters x tokens), not dollars.`;
+    const run = L.run || {};
+    $("#live-note").textContent = `${L.n} multiple-choice questions on ${run.gpu || run.device || "one device"} (${run.dtype || "?"}), one request at a time. ${L.small.split("/")[1]} accuracy ${pct(L.accuracy.small, 1)}, ${L.big.split("/")[1]} ${pct(L.accuracy.big, 1)}, oracle ${pct(L.accuracy.oracle, 1)}. Mean latency ${fmt(L.mean_latency_s.small, 2)} s vs ${fmt(L.mean_latency_s.big, 2)} s per question; these are ${run.device === "cuda" ? "GPU" : "CPU"} figures, measured while the machine was shared with other jobs. The cost proxy is compute (parameters x tokens), not dollars.`;
   } else $("#live-sec").hidden = true;
 }
 
@@ -404,7 +405,7 @@ function initPlayground() {
     };
     $("#run-btn").onclick = async () => {
       if (!ta.value.trim()) return;
-      $("#route-out").innerHTML = `<p class="note">Running on the local models, this can take a few seconds on CPU...</p>`;
+      $("#route-out").innerHTML = `<p class="note">Running on the local models, this can take a few seconds...</p>`;
       try {
         const r = await fetch("v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [{ role: "user", content: ta.value }], max_tokens: 160 }) });
         if (!r.ok) throw new Error(r.status);
@@ -432,6 +433,7 @@ function buildItemList() {
   const d = S.ev.d, ids = Object.keys(d.text).map(Number).slice(0, 80);
   if (!ids.length) return;
   $("#items-panel").hidden = false;
+  $("#items-panel .sec-note").textContent += " · prompt text from " + Object.values(d.attribution || {}).join(" and ") + ", shortened";
   const list = $("#item-list");
   ids.forEach((i) => {
     const b = document.createElement("button"); b.className = "item"; b.setAttribute("aria-pressed", "false");

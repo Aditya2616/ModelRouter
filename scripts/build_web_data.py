@@ -2,7 +2,7 @@
 
 Only derived numbers are bundled (predicted difficulty, each tier's recorded score and cost, task family).
 Prompt text is bundled for a few dozen items from source benchmarks whose own licences clearly allow
-redistribution (MMLU: MIT, GSM8K: MIT, HellaSwag: MIT, Winogrande: Apache-2.0), shortened and with
+redistribution (MMLU and GSM8K, both MIT on their dataset cards), shortened and with
 attribution. For every other family the UI shows the label only.
 """
 
@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from modelrouter import data as D  # noqa: E402
 
 PAIR = "gpt35_vs_gpt4"
-REDISTRIBUTABLE = {"mmlu": "MMLU, MIT", "gsm8k": "GSM8K, MIT", "hellaswag": "HellaSwag, MIT", "winogrande": "Winogrande, Apache-2.0"}
+REDISTRIBUTABLE = {"mmlu": "MMLU, MIT", "gsm8k": "GSM8K, MIT"}  # licence shown on each dataset card
 OUT = ROOT / "web" / "data"
 
 

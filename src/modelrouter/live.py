@@ -1,6 +1,6 @@
 """Small live experiment on this machine: a local small/big pair (Qwen2.5-0.5B and 1.5B Instruct).
 
-240 multiple-choice questions with known answers (ARC-Easy, ARC-Challenge, CommonsenseQA, MMLU; 60 each)
+300 multiple-choice questions with known answers (ARC-Easy, ARC-Challenge, CommonsenseQA, MMLU; 75 each)
 are answered by both models through the same provider code the gateway uses. Their real correctness
 becomes the training signal for a router for this pair. This is a CPU-scale demonstration of the
 mechanism; the offline RouterBench analysis is the main evidence.
@@ -36,7 +36,7 @@ SOURCES = {
     "commonsenseqa": ("tau/commonsense_qa", "data/validation-00000-of-00001.parquet"),
     "mmlu": ("cais/mmlu", "all/test-00000-of-00001.parquet"),
 }
-N_PER = 60
+N_PER = 75
 LETTERS = "ABCDE"
 PREFIX = "The correct answer is"   # forced start of the reply; the models then emit the letter
 DATA = Path("data/live")
@@ -91,17 +91,23 @@ def parse_letter(text: str) -> str | None:
     return m.group(1) if m else None
 
 
-def run_models(items: pd.DataFrame, out: Path = DATA / "runs.parquet", threads: int = 3, log=print) -> pd.DataFrame:
+def run_models(items: pd.DataFrame, out: Path = DATA / "runs.parquet", threads: int = 2, device: str | None = None,
+               log=print) -> tuple[pd.DataFrame, dict]:
     """Answer every item with both models, one model in memory at a time (the machine is memory-bound).
     Resumable per model: results are checkpointed to `out`. Records answer, correctness, latency, logprob."""
-    import gc
-
     runs = pd.read_parquet(out) if out.exists() else pd.DataFrame({"i": range(len(items)), "source": items.source.values,
                                                                       "gold": items.gold.values})
+    prov = LocalProvider(threads=threads, device=device)
+    meta = {"device": prov.device, "dtype": prov.dtype_name, "torch_threads": threads}
+    if prov.device.startswith("cuda"):
+        import torch
+
+        meta["gpu"] = torch.cuda.get_device_name(0)
     for tag, model in (("s", SMALL), ("b", BIG)):
         if f"{tag}_ok" in runs.columns and runs[f"{tag}_ok"].notna().all():
             continue
-        prov = LocalProvider(threads=threads)
+        # one untimed warm-up call so model load and CUDA start-up do not count as latency
+        prov.complete(model, [{"role": "user", "content": items.iloc[0].prompt}], max_tokens=4, prefix=PREFIX)
         recs = []
         t0 = time.time()
         for i in range(len(items)):
@@ -110,14 +116,13 @@ def run_models(items: pd.DataFrame, out: Path = DATA / "runs.parquet", threads: 
             recs.append({f"{tag}_text": c.text, f"{tag}_ok": float(parse_letter(c.text) == it.gold),
                          f"{tag}_latency": c.latency_s,
                          f"{tag}_logprob": c.mean_logprob if c.mean_logprob is not None else np.nan,
-                         f"{tag}_tokens": c.prompt_tokens})
+                         f"{tag}_tokens": c.prompt_tokens, f"{tag}_ctokens": c.completion_tokens})
             if (i + 1) % 20 == 0:
                 log(f"  {model.split('/')[1]}: {i + 1}/{len(items)} items, {time.time() - t0:.0f}s")
         runs = pd.concat([runs, pd.DataFrame(recs)], axis=1)
         runs.to_parquet(out, index=False)
-        del prov
-        gc.collect()
-    return runs
+        prov.release()
+    return runs, meta
 
 
 def _router_model():
@@ -125,8 +130,8 @@ def _router_model():
     return CalibratedClassifierCV(base, method="sigmoid", cv=3)
 
 
-def analyse(items: pd.DataFrame, runs: pd.DataFrame, out_dir: Path = Path("results"), model_dir: Path = Path("models"),
-            log=print) -> dict:
+def analyse(items: pd.DataFrame, runs: pd.DataFrame, meta: dict, out_dir: Path = Path("results"),
+            model_dir: Path = Path("models"), log=print) -> dict:
     X = featurize(items.prompt.tolist(), cache=DATA / "emb_live.npy")
     o = ev.Outcomes(runs.s_ok.to_numpy(float), runs.b_ok.to_numpy(float),
                     # cost proxy: parameters x prompt tokens (billions of parameter-tokens); see README
@@ -157,7 +162,12 @@ def analyse(items: pd.DataFrame, runs: pd.DataFrame, out_dir: Path = Path("resul
         "accuracy": {"small": float(o.s_score.mean()), "big": float(o.b_score.mean()),
                      "oracle": float(np.maximum(o.s_score, o.b_score).mean())},
         "share_big_strictly_better": float(y.mean()),
+        "run": {**meta, "note": "latency is end to end per question (prefill of the whole prompt plus up to 4 new tokens), "
+                                "one request at a time, after a warm-up call; machine shared with other jobs"},
         "mean_latency_s": {"small": float(runs.s_latency.mean()), "big": float(runs.b_latency.mean())},
+        "mean_prompt_tokens": {"small": float(runs.s_tokens.mean()), "big": float(runs.b_tokens.mean())},
+        "prompt_tokens_per_s": {"small": float(runs.s_tokens.sum() / runs.s_latency.sum()),
+                                "big": float(runs.b_tokens.sum() / runs.b_latency.sum())},
         "by_source": {s: {"n": int((src == s).sum()), "small": float(o.s_score[src == s].mean()),
                           "big": float(o.b_score[src == s].mean())} for s in sorted(set(src))},
         "cost_proxy_note": "cost proxy = prompt tokens x model parameters (billions); a compute proxy, not dollars",
@@ -197,8 +207,9 @@ def analyse(items: pd.DataFrame, runs: pd.DataFrame, out_dir: Path = Path("resul
     return res
 
 
-def run(log=print) -> dict:
+def run(device: str | None = None, log=print) -> dict:
     items = build_items()
     log(f"{len(items)} items: {items.source.value_counts().to_dict()}")
-    runs = run_models(items, log=log)
-    return analyse(items, runs, log=log)
+    runs, meta = run_models(items, device=device, log=log)
+    log(f"device={meta}")
+    return analyse(items, runs, meta, log=log)

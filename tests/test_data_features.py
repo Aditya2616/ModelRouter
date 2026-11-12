@@ -34,7 +34,7 @@ def test_build_slim_from_synthetic_pickle(tmp_path):
     n = 5
     cols: dict = {"sample_id": [f"s{i}" for i in range(n)], "prompt": [f"['q{i}']" for i in range(n)],
                   "eval_name": ["hellaswag"] * n}
-    for m in data.MODELS:
+    for m in [*[x for pr in data.PAIRS.values() for x in pr], "other-model"]:
         cols[m] = np.linspace(0, 1, n)
         cols[f"{m}|model_response"] = ["r"] * n
         cols[f"{m}|total_cost"] = np.full(n, 0.001)

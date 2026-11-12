@@ -23,16 +23,15 @@ DATA_DIR = Path("data")
 RAW = DATA_DIR / "routerbench_0shot.pkl"
 SLIM = DATA_DIR / "routerbench_slim.parquet"
 
-MODELS = [
-    "WizardLM/WizardLM-13B-V1.2",
-    "gpt-3.5-turbo-1106", "gpt-4-1106-preview", "meta/code-llama-instruct-34b-chat",
-    "meta/llama-2-70b-chat", "mistralai/mistral-7b-chat", "mistralai/mixtral-8x7b-chat",
-    "zero-one-ai/Yi-34B-Chat",
-]
 PAIRS = {
     "gpt35_vs_gpt4": ("gpt-3.5-turbo-1106", "gpt-4-1106-preview"),
     "mixtral_vs_gpt4": ("mistralai/mixtral-8x7b-chat", "gpt-4-1106-preview"),
 }
+
+
+def model_columns(df: pd.DataFrame) -> list[str]:
+    """Models in a RouterBench frame: every column that has a matching `<model>|total_cost` column."""
+    return sorted(c for c in df.columns if f"{c}|total_cost" in df.columns)
 
 
 def short(model: str) -> str:
@@ -96,7 +95,7 @@ def build_slim(raw: Path = RAW, out: Path = SLIM) -> pd.DataFrame:
     keep = pd.DataFrame({"sample_id": df["sample_id"].astype(str), "prompt": df["prompt"].map(clean_prompt),
                          "task": df["eval_name"]})
     keep["family"] = keep["task"].map(family)
-    for m in MODELS:
+    for m in model_columns(df):
         keep[f"score__{short(m)}"] = df[m].astype("float32")
         keep[f"cost__{short(m)}"] = df[f"{m}|total_cost"].astype("float64")
     keep = keep.drop_duplicates("prompt").reset_index(drop=True)

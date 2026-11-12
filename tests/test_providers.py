@@ -108,3 +108,20 @@ def test_repo_pricing_file_is_valid_and_dated():
     t = PriceTable.load("config/pricing.yaml")
     assert t.price_date == "2026-11-12" and "change" in t.note.lower()
     assert t.price("gpt-6-luna").output < t.price("gpt-6.1-sol").output
+    assert not any(m.startswith("<") for m in t.models)  # the hosted template stays commented out
+
+
+def test_hosted_tier_without_model_id_is_a_clear_config_error(pricing_path="config/pricing.yaml"):
+    from modelrouter.gateway.app import gateway_from_config
+    from modelrouter.router import DifficultyRouter
+
+    class Dummy(DifficultyRouter):
+        def __init__(self):
+            pass
+
+        def score(self, prompt):
+            return 0.1
+
+    cfg = {"tiers": {"small": {"provider": "openai"}, "big": {"provider": "anthropic", "model": "m"}}}
+    with pytest.raises(ValueError, match="no model id is set"):
+        gateway_from_config(cfg, PriceTable.load(pricing_path), Dummy())

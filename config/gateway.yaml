@@ -16,3 +16,8 @@ escalation:
   escalate_on_error: true
 cache: {enabled: true, max_items: 512, ttl_seconds: 3600}
 generation: {max_tokens: 256, temperature: 0.0}
+# Hosted tiers: no model ids are built in. Set them here (or with MODELROUTER_SMALL_MODEL / MODELROUTER_BIG_MODEL),
+# add the same ids to pricing.yaml, and set OPENAI_API_KEY or ANTHROPIC_API_KEY. For example:
+#   tiers:
+#     small: {provider: openai, model: gpt-6-luna}
+#     big:   {provider: openai, model: gpt-6.1-sol}

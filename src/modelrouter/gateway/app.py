@@ -91,7 +91,11 @@ def gateway_from_config(cfg: dict, pricing: PriceTable, router: DifficultyRouter
     tiers = {}
     for name in ("small", "big"):
         t = cfg["tiers"][name]
-        tiers[name] = Tier(name, _build_provider(t["provider"], provs), t["model"], t.get("price_as", t["model"]))
+        model = os.environ.get(f"MODELROUTER_{name.upper()}_MODEL") or t.get("model") or ""
+        if t["provider"] in ("openai", "anthropic") and not model:
+            raise ValueError(f"tier '{name}' uses the {t['provider']} provider but no model id is set: "
+                             f"set tiers.{name}.model in the gateway config or MODELROUTER_{name.upper()}_MODEL")
+        tiers[name] = Tier(name, _build_provider(t["provider"], provs), model, t.get("price_as", model))
     c_s = pricing.cost(tiers["small"].price_as, 200, 100)
     c_b = pricing.cost(tiers["big"].price_as, 200, 100)
     return Gateway(

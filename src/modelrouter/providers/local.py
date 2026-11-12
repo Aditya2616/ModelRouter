@@ -5,6 +5,7 @@ This is the path that is genuinely exercised end to end on this machine.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 
@@ -14,10 +15,39 @@ from .base import Completion, Message, ProviderError
 class LocalProvider:
     name = "local"
 
-    def __init__(self, threads: int | None = None):
+    def __init__(self, threads: int | None = None, device: str | None = None):
+        """`device` is "cuda" or "cpu"; by default `MODELROUTER_DEVICE` if set, else CUDA when available.
+        Models run in float16 on CUDA and float32 on the CPU."""
         self._models: dict[str, tuple] = {}
         self._lock = threading.Lock()
         self._threads = threads
+        self._device = device or os.environ.get("MODELROUTER_DEVICE") or None
+
+    @property
+    def device(self) -> str:
+        if self._device is None:
+            import torch
+
+            self._device = "cuda" if torch.cuda.is_available() else "cpu"
+        return self._device
+
+    @property
+    def dtype_name(self) -> str:
+        return "float16" if self.device.startswith("cuda") else "float32"
+
+    def release(self) -> None:
+        """Drop every loaded model (one model in memory at a time in the experiments)."""
+        import gc
+
+        self._models.clear()
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:  # pragma: no cover
+            pass
 
     def _load(self, model: str):
         if model not in self._models:
@@ -29,7 +59,8 @@ class LocalProvider:
             if self._threads:
                 torch.set_num_threads(self._threads)
             tok = AutoTokenizer.from_pretrained(model)
-            lm = AutoModelForCausalLM.from_pretrained(model, dtype=torch.float32)
+            dtype = torch.float16 if self.device.startswith("cuda") else torch.float32
+            lm = AutoModelForCausalLM.from_pretrained(model, dtype=dtype).to(self.device)
             lm.eval()
             self._models[model] = (tok, lm)
         return self._models[model]
@@ -49,6 +80,7 @@ class LocalProvider:
             else:
                 ids = tok.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt",
                                               return_dict=True)
+            ids = {k: v.to(self.device) for k, v in ids.items()}
             n_prompt = ids["input_ids"].shape[1]
             gen_kwargs = {"max_new_tokens": max_tokens, "return_dict_in_generate": True,
                           "output_scores": True, "pad_token_id": tok.eos_token_id}
@@ -58,6 +90,8 @@ class LocalProvider:
                 gen_kwargs.update(do_sample=False)
             with torch.inference_mode():
                 out = lm.generate(**ids, **gen_kwargs)
+            if self.device.startswith("cuda"):
+                torch.cuda.synchronize()
             seq = out.sequences[0, n_prompt:]
             lps = []
             for step, tid in enumerate(seq):
