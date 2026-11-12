@@ -1,0 +1,17 @@
+# Gateway configuration. Environment variables OPENAI_API_KEY / ANTHROPIC_API_KEY enable hosted tiers.
+router_pair: gpt35_vs_gpt4          # which trained difficulty model to load from models/
+tiers:
+  small: {provider: local, model: Qwen/Qwen2.5-0.5B-Instruct, price_as: gpt-6-luna}
+  big:   {provider: local, model: Qwen/Qwen2.5-1.5B-Instruct, price_as: gpt-6.1-sol}
+policy:
+  kind: threshold                   # threshold | fraction | budget
+  threshold: 0.5                    # send to big when predicted difficulty >= threshold
+  target_big_fraction: 0.35         # for kind: fraction
+  budget_usd_per_1k: 1.0            # for kind: budget (USD per 1,000 requests)
+escalation:
+  enabled: true
+  min_mean_logprob: -1.6            # local tier: escalate when the answer's mean token logprob is below this
+  escalate_on_empty: true
+  escalate_on_error: true
+cache: {enabled: true, max_items: 512, ttl_seconds: 3600}
+generation: {max_tokens: 256, temperature: 0.0}
