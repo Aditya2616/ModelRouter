@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ModelRouter</title>
+<meta name="mr-mode" content="static">
+<meta name="description" content="A difficulty classifier that sends easy requests to a small model and hard ones to a big model, with a real cost-quality curve.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2307080a'/%3E%3Cpath d='M16 6l10 10-10 10L6 16z' fill='%23d7ff3f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><i></i>ModelRouter</div>
+    <div class="top-right">
+      <span class="badge" id="mode-badge">loading</span>
+      <button class="icon-btn" id="theme-btn" aria-label="Switch colour theme">◐</button>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="eyebrow">LLM infrastructure · difficulty routing</div>
+    <h1>Easy questions to small models, <em>hard ones</em> to big.</h1>
+    <p class="lede">A small classifier predicts, before any model runs, whether the cheap model will be good enough. Everything below is computed from real recorded outcomes of two models answering the same prompts.</p>
+    <div class="pairline" id="pairline"></div>
+  </div>
+
+  <section id="stream-sec">
+    <div class="sec-head">
+      <h2>Requests <em>split by difficulty</em></h2>
+      <div class="sec-note" id="stream-note">Each dot is a real held-out prompt. It is routed at the diamond with the current threshold.</div>
+    </div>
+    <div class="grid2">
+      <div>
+        <div class="stage">
+          <canvas id="stream" aria-label="Animation of requests being routed to the small or the big model"></canvas>
+          <div class="stage-bar">
+            <button class="btn primary" id="play-btn" aria-pressed="true">Pause</button>
+            <button class="btn" id="speed-btn">1x</button>
+            <button class="btn" id="reset-btn">Reset meter</button>
+            <span class="spacer"></span>
+            <span class="mono sec-note" id="stream-count"></span>
+          </div>
+        </div>
+        <div class="slider-box panel" style="margin-top:14px">
+          <div class="slider-label"><span>Threshold: send to big when difficulty &ge; t</span><output id="thr-out">0.50</output></div>
+          <input id="thr" type="range" min="0" max="1000" value="500" aria-label="Routing threshold">
+          <div class="presets">
+            <button class="btn" data-preset="cpt95">Match big 95%</button>
+            <button class="btn" data-preset="0.5">Half to big</button>
+            <button class="btn" data-preset="0.2">20% to big</button>
+            <button class="btn" data-preset="0">All small</button>
+            <button class="btn" data-preset="1">All big</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="meter" aria-live="polite">
+          <div class="sec-note" style="margin-bottom:-2px">COST METER · cost per 1,000 requests</div>
+          <div class="bar-row"><span>All big</span><div class="bar ref"><i id="bar-big"></i></div><span class="bar-val" id="val-big">$0</span></div>
+          <div class="bar-row"><span>Routed</span><div class="bar"><i id="bar-routed"></i></div><span class="bar-val" id="val-routed">$0</span></div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="k">Cost saved</div><div class="v lime" id="st-save">0%</div></div>
+          <div class="stat"><div class="k">Quality kept</div><div class="v" id="st-qual">0%</div></div>
+          <div class="stat"><div class="k">To big</div><div class="v" id="st-big">0%</div></div>
+          <div class="stat"><div class="k">Misroutes</div><div class="v ember" id="st-miss">0</div></div>
+        </div>
+        <p class="note" id="meter-note">Costs are the per-call costs recorded in RouterBench (late-2023 prices). A misroute is a request sent small where the big model would have been right and the small one was wrong.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="curve-sec">
+    <div class="sec-head">
+      <h2>The real <em>cost-quality</em> curve</h2>
+      <div class="sec-note">Drag the chart or the slider. The marker is computed on the whole held-out set, not on the dots above.</div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="chart-wrap"><canvas id="curve" aria-label="Quality versus fraction of traffic sent to the big model"></canvas></div>
+        <div class="legend">
+          <span style="--c:var(--lime)">router</span>
+          <span class="band" style="--c:var(--bone)">random routing, 5-95%</span>
+          <span class="dash" style="--c:var(--mute)">oracle</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="stats" style="grid-template-columns:1fr 1fr">
+          <div class="stat"><div class="k">Fraction to big</div><div class="v" id="c-frac">-</div></div>
+          <div class="stat"><div class="k">Quality (mean score)</div><div class="v" id="c-qual">-</div></div>
+          <div class="stat"><div class="k">vs random, same fraction</div><div class="v lime" id="c-adv">-</div></div>
+          <div class="stat"><div class="k">Cost vs all big</div><div class="v" id="c-cost">-</div></div>
+        </div>
+        <div class="tablewrap" style="margin-top:12px"><table id="metrics-table"></table></div>
+        <p class="note" id="curve-note"></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="honest-sec">
+    <div class="sec-head">
+      <h2>What the router <em>actually learns</em></h2>
+      <div class="sec-note">Held-out test set, and a harder test: unseen benchmark families.</div>
+    </div>
+    <div class="grid2 even">
+      <div class="panel"><div class="sec-note" style="margin-bottom:8px">MODEL COMPARISON · 4-fold CV on development data</div><div class="tablewrap"><table id="cv-table"></table></div></div>
+      <div class="panel"><div class="sec-note" style="margin-bottom:8px">LEAVE ONE BENCHMARK FAMILY OUT · train on the rest</div><div class="tablewrap"><table id="lofo-table"></table></div></div>
+    </div>
+    <p class="finding" id="finding"></p>
+  </section>
+
+  <section id="play-sec">
+    <div class="sec-head">
+      <h2>Try a <em>prompt</em></h2>
+      <div class="sec-note" id="play-note"></div>
+    </div>
+    <div class="grid2 even">
+      <div class="panel">
+        <textarea id="prompt" aria-label="Prompt to route" placeholder="Type a prompt, for example: What is the capital of France?"></textarea>
+        <div class="chips" id="chips"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary" id="score-btn">Score difficulty</button>
+          <button class="btn" id="run-btn">Run through gateway</button>
+        </div>
+        <p class="note" id="play-help"></p>
+      </div>
+      <div class="panel" id="play-out" aria-live="polite">
+        <div class="sec-note">DIFFICULTY</div>
+        <div class="gauge" id="gauge"><span class="thr" id="gauge-thr"></span><span class="dot" id="gauge-dot"></span></div>
+        <div class="route-out" id="route-out"><p class="note">Pick a prompt to see its predicted difficulty and where it would be routed.</p></div>
+      </div>
+    </div>
+    <div class="panel" id="items-panel" style="margin-top:14px" hidden>
+      <div class="sec-note" style="margin-bottom:8px">RECORDED PROMPTS · with the real outcome of each model</div>
+      <div class="item-list" id="item-list"></div>
+    </div>
+  </section>
+
+  <section id="live-sec">
+    <div class="sec-head">
+      <h2>On this <em>machine</em></h2>
+      <div class="sec-note">A small CPU-scale experiment with two local models. It demonstrates the mechanism; the RouterBench analysis above is the main evidence.</div>
+    </div>
+    <div class="grid2 even">
+      <div class="panel"><div class="chart-wrap"><canvas id="live-curve" aria-label="Local experiment: quality versus fraction to the larger local model"></canvas></div>
+        <div class="legend"><span style="--c:var(--lime)">router (cross-validated)</span><span class="band" style="--c:var(--bone)">random routing, 5-95%</span></div></div>
+      <div class="panel"><div class="tablewrap"><table id="live-table"></table></div><p class="note" id="live-note"></p></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Built by <a href="https://adityajain16.vercel.app">Aditya Jain</a></span>
+    <span><a href="https://github.com/Aditya2616/ModelRouter">github.com/Aditya2616/ModelRouter</a></span>
+    <span id="foot-data"></span>
+  </footer>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
