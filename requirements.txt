@@ -1,0 +1,18 @@
+# everything here is also listed in pyproject.toml; install with: pip install -e ".[dev]"
+numpy
+pandas
+scikit-learn
+scipy
+joblib
+pyarrow
+sentence-transformers
+transformers
+torch
+fastapi
+uvicorn
+httpx
+pydantic
+pyyaml
+pytest
+ruff
+playwright

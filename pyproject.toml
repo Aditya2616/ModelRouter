@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modelrouter"
+version = "0.1.0"
+description = "A difficulty classifier that routes LLM requests to a cheap or a strong model, with an OpenAI-compatible gateway."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=2", "pandas>=2", "scikit-learn>=1.5", "scipy", "joblib", "pyarrow",
+  "sentence-transformers>=3", "transformers>=4.45", "torch",
+  "fastapi>=0.110", "uvicorn>=0.29", "httpx>=0.27", "pydantic>=2", "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "playwright"]
+
+[project.scripts]
+modelrouter = "modelrouter.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: needs model downloads or long training (deselect with -m 'not slow')"]
+addopts = "-m 'not slow'"
+
+[tool.ruff]
+line-length = 110
+src = ["src", "tests"]
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
