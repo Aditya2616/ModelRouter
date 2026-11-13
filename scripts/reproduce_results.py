@@ -50,7 +50,7 @@ def _walk(a, b, path: str, out: list[str]) -> int:
                 n += _walk(a[k], b[k], f"{path}/{k}", out)
         return n
     if isinstance(a, list) and isinstance(b, list):
-        return (0 if len(a) == len(b) else 1) + sum(_walk(x, y, f"{path}[{i}]", out) for i, (x, y) in enumerate(zip(a, b)))
+        return (0 if len(a) == len(b) else 1) + sum(_walk(x, y, f"{path}[{i}]", out) for i, (x, y) in enumerate(zip(a, b, strict=False)))
     if isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool):
         same = abs(a - b) <= 1e-9 * max(1.0, abs(a), abs(b)) or (a != a and b != b)
     else:
