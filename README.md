@@ -210,11 +210,30 @@ pytest                                       # fast offline tests, including the
 ruff check .
 ```
 
-Run `scripts/embed_routerbench.py` first, otherwise `train` embeds the prompts itself. `pytest -m slow` runs a model test that needs the Qwen download.
+Run `scripts/embed_routerbench.py` first, otherwise `train` embeds the prompts itself. `pytest -m slow` runs two model tests that need the Qwen download.
+
+I ran `scripts/reproduce_results.py` once from a fresh clone of the committed repository (no data, no models, no caches in the folder) on a <!--v:repro_gpu-->NVIDIA GeForce RTX 5060 Ti<!--/v--> machine with <!--v:repro_threads-->12<!--/v--> CPU threads and PyTorch <!--v:repro_torch-->2.11.0+cu128<!--/v-->, with the Hugging Face cache already holding the models and the live-experiment datasets. It took <!--v:repro_min-->52<!--/v--> minutes in total, while other jobs shared the machine:
+
+<!--BEGIN:repro_steps-->
+| step | seconds |
+|---|---|
+| download and convert RouterBench (about 100 MB) | 7 |
+| MiniLM embeddings of 36,481 prompts (CPU, float32) | 928 |
+| duplicate check | 1 |
+| train and evaluate, pair A (CPU) | 1,054 |
+| train and evaluate, pair B (CPU) | 1,009 |
+| live experiment: 3,000 questions through both models, three routers (GPU, float16) | 147 |
+| export web data | 1 |
+| build docs | 0 |
+| regenerate README numbers | 1 |
+| **total** | 3,149 |
+<!--END:repro_steps-->
+
+At the end the script compares each regenerated file in `results/` with the committed one. All <!--v:repro_nfiles-->7<!--/v--> files (the JSON results, the test-set predictions and the live test items) regenerated identically, apart from timings (training seconds, latency, throughput and the GPU load recorded before each timing run), which depend on what else the machine is doing and differ between runs. The README numbers that depend on those timings therefore moved slightly in the clone and were not copied back. The full record, with the comparison, is in `results/reproduce.json`.
 
 ### Static demo
 
-`docs/` is the same interface with recorded data, ready for GitHub Pages: `python -m http.server -d docs 8109`. It ships only derived per-item numbers (predicted difficulty, each tier's recorded score and cost, task label). Prompt text is shown only for sources whose dataset card gives a licence that permits redistribution, shortened, with an attribution line in the page: MMLU (Hendrycks et al., MIT licence) and GSM8K (Cobbe et al., MIT licence). Every other item shows its task label only. `scripts/screenshot.py` checks the page at 1440x900 and 390x844 (touch).
+`docs/` is the same interface with recorded data, ready for GitHub Pages: `python -m http.server -d docs 8109`. It ships only derived per-item numbers (predicted difficulty, each tier's recorded score and cost, task label). Prompt text is shown only for sources whose dataset card gives a licence that permits redistribution, shortened, with an attribution line in the page: MMLU (Hendrycks et al., MIT licence) and GSM8K (Cobbe et al., MIT licence). Every other item shows its task label only. `scripts/ui_check.py` checks the page at 1440x900 and 390x844 (touch) and writes the screenshots in `docs/assets/`.
 
 ![Phone](docs/assets/served-phone-top.png)
 

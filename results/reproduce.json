@@ -1,0 +1,49 @@
+{
+ "total_seconds": 3149.0,
+ "steps_seconds": {
+  "download and convert RouterBench": 6.8,
+  "embed prompts": 928.5,
+  "duplicate check": 1.1,
+  "train and evaluate, pair A": 1054.1,
+  "train and evaluate, pair B": 1009.4,
+  "live local experiment": 147.4,
+  "export web data": 0.8,
+  "build docs": 0.1,
+  "regenerate README numbers": 0.8
+ },
+ "hardware": {
+  "platform": "Windows-11-10.0.26300-SP0",
+  "python": "3.13.15",
+  "torch": "2.11.0+cu128",
+  "cuda": true,
+  "gpu": "NVIDIA GeForce RTX 5060 Ti",
+  "cpu_threads": 12
+ },
+ "skipped_live": false,
+ "compared_with_committed": {
+  "json_files": {
+   "results/duplicates.json": {
+    "differing_values": 0,
+    "paths": []
+   },
+   "results/live.json": {
+    "differing_values": 0,
+    "paths": []
+   },
+   "results/offline_gpt35_vs_gpt4.json": {
+    "differing_values": 0,
+    "paths": []
+   },
+   "results/offline_mixtral_vs_gpt4.json": {
+    "differing_values": 0,
+    "paths": []
+   }
+  },
+  "parquet_files": {
+   "results/live_items.parquet": "identical",
+   "results/test_predictions_gpt35_vs_gpt4.parquet": "identical",
+   "results/test_predictions_mixtral_vs_gpt4.parquet": "identical"
+  },
+  "all_identical_except_timings": true
+ }
+}

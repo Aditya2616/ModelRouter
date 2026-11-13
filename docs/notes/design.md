@@ -56,7 +56,7 @@ ModelRouter/
   web/               index.html, app.js (ES modules), style.css; served at /
   docs/              static demo: same UI + recorded JSON from real runs; assets/ screenshots
   tests/             pytest (fast, offline); `@pytest.mark.slow` for model downloads
-  scripts/           reproduce_results.py, screenshot.py (Playwright), build_docs.py
+  scripts/           reproduce_results.py, ui_check.py (Playwright), build_docs.py
   .github/workflows/ci.yml     ruff + fast tests
 ```
 

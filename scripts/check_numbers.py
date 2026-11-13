@@ -52,7 +52,8 @@ def load() -> dict:
     live = json.loads((ROOT / "results" / "live.json").read_text(encoding="utf-8"))
     dup = json.loads((ROOT / "results" / "duplicates.json").read_text(encoding="utf-8"))
     pricing = yaml.safe_load((ROOT / "config" / "pricing.yaml").read_text(encoding="utf-8"))
-    return {"off": off, "pred": pred, "live": live, "pricing": pricing, "dup": dup}
+    repro = json.loads((ROOT / "results" / "reproduce.json").read_text(encoding="utf-8"))
+    return {"repro": repro, "off": off, "pred": pred, "live": live, "pricing": pricing, "dup": dup}
 
 
 def operating_point(pred: pd.DataFrame, frac: float) -> dict:
@@ -221,6 +222,21 @@ def values(D: dict) -> tuple[dict[str, str], dict[str, str]]:
     for s, m in live["leave_source_out"].items():
         rows.append(f"| {s} | {m['n']} | {f3(m['auc'])} | {f3(m['apgr'])} | {ci(m['advantage_vs_random_30pct'])} |")
     blocks["live_lofo"] = "\n".join(rows)
+    # reproduce run
+    rp = D["repro"]
+    assert rp["compared_with_committed"]["all_identical_except_timings"], "the reproduce run did not regenerate the results"
+    assert abs(sum(rp["steps_seconds"].values()) - rp["total_seconds"]) < 5
+    hw = rp["hardware"]
+    v.update(repro_min=f"{rp['total_seconds'] / 60:.0f}", repro_gpu=hw["gpu"], repro_torch=hw["torch"], repro_threads=str(hw["cpu_threads"]),
+             repro_nfiles=str(len(rp["compared_with_committed"]["json_files"]) + len(rp["compared_with_committed"]["parquet_files"])))
+    names = {"download and convert RouterBench": "download and convert RouterBench (about 100 MB)",
+             "embed prompts": "MiniLM embeddings of 36,481 prompts (CPU, float32)",
+             "duplicate check": "duplicate check", "train and evaluate, pair A": "train and evaluate, pair A (CPU)",
+             "train and evaluate, pair B": "train and evaluate, pair B (CPU)",
+             "live local experiment": "live experiment: 3,000 questions through both models, three routers (GPU, float16)",
+             "export web data": "export web data", "build docs": "build docs", "regenerate README numbers": "regenerate README numbers"}
+    blocks["repro_steps"] = "\n".join(["| step | seconds |", "|---|---|"] + [f"| {names[k]} | {s:,.0f} |" for k, s in rp["steps_seconds"].items()]
+                                      + [f"| **total** | {rp['total_seconds']:,.0f} |"])
     # pricing
     models = pr["models"]
     small, big = "gpt-6-luna", "gpt-6.1-sol"
