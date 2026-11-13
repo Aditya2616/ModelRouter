@@ -1,12 +1,14 @@
 """Browser check of the interface in headless Chromium, at 1440x900 and 390x844 (touch).
 
-    python scripts/ui_check.py http://127.0.0.1:8109/ docs/assets/served      # served by `modelrouter serve`
-    python scripts/ui_check.py http://127.0.0.1:8110/ docs/assets/static      # docs/ through a plain static file server
+    python scripts/ui_check.py http://127.0.0.1:8110/ docs/assets/static      # docs/ through a plain static file server (the README screenshots)
+    python scripts/ui_check.py http://127.0.0.1:8109/ /tmp/served              # served by `modelrouter serve`, screenshots not kept
 
 For each viewport it reports: console errors and warnings, failed or 404 requests, horizontal overflow, tap targets
 under 44 px, the frame rate of the stream at 1x / 4x / 16x, whether moving the threshold slider changes which colours
 the dots on the canvas are (re-routing in flight), and the state of the preset chips. It writes screenshots of the
-top of the page (the stream mid-flow), the full page, the preset chips and the tables.
+stream section and, on the phone, the threshold, presets and cost meter, both at the "Match big 95%" preset. Only
+the screenshots the README embeds are written. The cost meter reads every held-out prompt, so at that preset it
+shows the README's headline operating point; the script records what it shows under "readouts".
 """
 
 from __future__ import annotations
@@ -40,6 +42,9 @@ COLOURS_JS = """() => {
 
 
 def run(url: str, prefix: str) -> dict:
+    def snap(target, name: str, **kw) -> None:
+        target.screenshot(path=f"{prefix}-{name}.png", **kw)
+
     report: dict = {}
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -57,8 +62,7 @@ def run(url: str, prefix: str) -> dict:
             page.on("response", lambda r, e=bad: e.append(f"{r.status} {r.url}") if r.status >= 400 else None)
             page.on("requestfailed", lambda r, e=bad: e.append(f"failed {r.url}"))
             page.goto(url, wait_until="networkidle")
-            page.wait_for_timeout(4000)  # let the stream fill: the first screenshot shows it mid-flow
-            page.screenshot(path=f"{prefix}-{name}-top.png")
+            page.wait_for_timeout(4000)  # let the stream fill
             r = {"console_errors": errors, "bad_requests": bad, "mode": page.inner_text("#mode-badge"),
                  "horizontal_overflow": page.evaluate("document.body.scrollWidth > document.documentElement.clientWidth || document.documentElement.scrollWidth > document.documentElement.clientWidth"),
                  "small_targets": page.evaluate(SMALL_TARGETS_JS), "fps": {}}
@@ -77,20 +81,26 @@ def run(url: str, prefix: str) -> dict:
                                 "pressed": page.get_attribute(f'[data-preset="{preset}"]', "aria-pressed")}
             r["preset_states"] = seen
             r["rerouting_changes_colours"] = seen["0"]["colours"] != seen["1"]["colours"]
-            page.click('[data-speed="1"]')
-            page.evaluate("document.querySelector('.slider-box').scrollIntoView({block: 'center'})")
-            page.wait_for_timeout(800)
-            page.screenshot(path=f"{prefix}-{name}-presets.png")  # viewport: stage, slider and preset chips
-            for tid in ("#metrics-table", "#lofo-table", "#live-table"):
-                page.evaluate(f"document.querySelector('{tid}').scrollIntoView({{block: 'center'}})")
-                page.wait_for_timeout(800)
-                page.screenshot(path=f"{prefix}-{name}-{tid[1:]}.png")
-            page.evaluate("document.querySelector('#stream').scrollIntoView({block: 'center'})")
-            page.wait_for_timeout(2500)
-            page.screenshot(path=f"{prefix}-{name}-stream.png")  # the stream mid-flow
-            page.evaluate("window.scrollTo(0, 0)")
-            page.wait_for_timeout(500)
-            page.screenshot(path=f"{prefix}-{name}-full.png", full_page=True)
+            # the screenshots: "Match big 95%" is still the active preset; let the stream refill, then wait for fonts
+            page.evaluate("document.fonts.ready")
+            page.wait_for_timeout(3000)
+            r["readouts"] = {k: page.inner_text(f"#{k}") for k in ("val-big", "val-routed", "st-save", "st-qual", "st-big", "st-miss", "stream-count")}
+            if name == "desktop":
+                # the whole stream section with a little air around it, cut between sections
+                box = page.evaluate(
+                    "(() => { const r = document.querySelector('#stream-sec').getBoundingClientRect();"
+                    " return { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height }; })()")
+                snap(page, "desktop-stream", full_page=True,
+                     clip={"x": max(0, box["x"] - 24), "y": box["y"] - 12, "width": box["w"] + 48, "height": box["h"] + 24})
+            else:
+                # threshold, presets and the cost meter in one 390-wide frame, cut at the bottom edge of the meter card
+                page.evaluate(
+                    "window.scrollTo({top: document.querySelector('.slider-box').getBoundingClientRect().top + window.scrollY - 14, behavior: 'instant'})"
+                )
+                page.wait_for_timeout(600)
+                bottom = page.evaluate("document.querySelector('#stream-sec .grid2 > .panel').getBoundingClientRect().bottom")
+                r["phone_frame_bottom_px"] = round(bottom + 10)
+                snap(page, "phone-presets", clip={"x": 0, "y": 0, "width": 390, "height": min(bottom + 10, 844)})
             r["table_overflow"] = page.evaluate(
                 "[...document.querySelectorAll('.tablewrap')].filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.querySelector('table').id)")
             report[name] = r

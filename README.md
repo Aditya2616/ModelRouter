@@ -1,14 +1,21 @@
 # ModelRouter
 
+[![CI](https://github.com/Aditya2616/ModelRouter/actions/workflows/ci.yml/badge.svg)](https://github.com/Aditya2616/ModelRouter/actions/workflows/ci.yml)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+
 Easy questions go to a small model, hard ones to a big model. A small scikit-learn classifier predicts, before any LLM runs, whether the cheap model will be good enough. An OpenAI-compatible gateway uses that score to route each request and keeps a ledger of what it saved.
 
-![The request stream mid-flow on desktop](docs/assets/served-desktop-stream.png)
+Measured: on RouterBench the router keeps 95% of the big model's quality at <!--v:a_op_cost-->37%<!--/v--> of the cost, but it does not transfer to unseen benchmark families, and on a local Qwen pair it does no better than random routing (see [Results](#results)).
 
-The `docs/` folder is a static copy of the interface that replays recorded results, so it can be hosted on GitHub Pages with no backend (see [Static demo](#static-demo)).
+![The request stream on desktop at the Match big 95% preset: dots routed to the small and big lanes, with the cost meter beside it](docs/assets/static-desktop-stream.png)
+
+<img src="docs/assets/static-phone-presets.png" width="260" alt="Phone layout: threshold slider, presets and cost meter">
+
+The cost meter reads every held-out prompt at the chosen threshold, so at "Match big 95%" it shows the headline operating point from Results; the dots are a stream of those same prompts, and the counter shows how many have streamed. The `docs/` folder is a static copy of the interface that replays recorded results (see [Static demo](#static-demo)).
 
 Numbers in this README are generated from `results/*.json` by `scripts/check_numbers.py` and checked by a test, so they cannot drift from the results files.
 
-## What is in here
+## How it works
 
 - **Offline lab.** A difficulty classifier trained on [RouterBench](https://github.com/withmartian/routerbench)'s recorded outcomes of <!--v:n_models-->11<!--/v--> LLMs on <!--v:n_total-->36,481<!--/v--> prompts. Because every model's answer is already recorded, a router can be scored with no API calls: for any threshold, quality and cost are read off the recorded outcomes of whichever model the router picked.
 - **Gateway.** FastAPI, `POST /v1/chat/completions` (OpenAI schema, `model: "auto"`), threshold, target-fraction and budget policies, escalation from small to big on error, empty output or low confidence, an LRU cache, and a SQLite cost ledger that books routed cost against the send-everything-to-big counterfactual.
@@ -39,7 +46,7 @@ Design notes and the research behind the choices are in [`docs/notes/`](docs/not
 
 ### Offline: RouterBench recorded outcomes (the main evidence)
 
-Headline pair A: `<!--v:small_a-->gpt-3.5-turbo-1106<!--/v-->` (small) against `<!--v:big_a-->gpt-4-1106-preview<!--/v-->` (big). Costs are RouterBench's recorded per-call costs at **November 2023** prices, kept separate from the current list prices in `config/pricing.yaml`. The data is split by prompt, stratified by sub-benchmark: <!--v:n_dev-->31,008<!--/v--> development prompts and <!--v:n_test-->5,473<!--/v--> held-out test prompts, which were scored once. No prompt can sit on both sides of the split: comparing prompts by a normalised key (lower case, single spaces, and for GSM8K the real question after the shared few-shot block) gives <!--v:dup_keys-->36,481<!--/v--> unique keys for <!--v:n_total-->36,481<!--/v--> prompts, <!--v:dup_rows-->0<!--/v--> duplicates (`scripts/check_duplicates.py`; `train` refuses to run if that stops being true), so grouping the split by prompt changes nothing and the numbers below did not need re-running. The classifier is chosen by out-of-fold APGR on the development data: a <!--v:classifier-->calibrated random forest predicting that the small model gets the prompt wrong<!--/v-->. Features are all-MiniLM-L6-v2 embeddings plus <!--v:n_lexical-->16<!--/v--> lexical statistics, computed on the CPU in float32.
+Headline pair A: <!--v:small_a-->`gpt-3.5-turbo-1106`<!--/v--> (small) against <!--v:big_a-->`gpt-4-1106-preview`<!--/v--> (big). Costs are RouterBench's recorded per-call costs at **November 2023** prices, kept separate from the current list prices in `config/pricing.yaml`. The data is split by prompt, stratified by sub-benchmark: <!--v:n_dev-->31,008<!--/v--> development prompts and <!--v:n_test-->5,473<!--/v--> held-out test prompts, which were scored once. No prompt can sit on both sides of the split: comparing prompts by a normalised key (lower case, single spaces, and for GSM8K the real question after the shared few-shot block) gives <!--v:dup_keys-->36,481<!--/v--> unique keys for <!--v:n_total-->36,481<!--/v--> prompts, <!--v:dup_rows-->0<!--/v--> duplicates (`scripts/check_duplicates.py`; `train` refuses to run if that stops being true). The classifier is chosen by out-of-fold APGR on the development data: a <!--v:classifier-->calibrated random forest predicting that the small model gets the prompt wrong<!--/v-->. Features are all-MiniLM-L6-v2 embeddings plus <!--v:n_lexical-->16<!--/v--> lexical statistics, computed on the CPU in float32.
 
 <!--BEGIN:offline_a-->
 | Held-out test, pair A | value |
@@ -56,7 +63,7 @@ Headline pair A: `<!--v:small_a-->gpt-3.5-turbo-1106<!--/v-->` (small) against `
 
 In words: keeping <!--v:a_op_quality-->95.1%<!--/v--> of the big model's quality takes the <!--v:a_op_k-->2,314<!--/v--> hardest held-out prompts (<!--v:a_op_frac-->42.3%<!--/v-->, ties included) on the big model, which costs <!--v:a_op_cost-->37%<!--/v--> of sending everything there. The big model costs <!--v:a_cost_ratio-->13.6x<!--/v--> the small one per request on these recorded prices.
 
-Pair B, `<!--v:small_b-->mistralai/mixtral-8x7b-chat<!--/v-->` against the same big model, has a wider quality gap (always-small quality <!--v:b_small_q-->0.551<!--/v-->): AUC <!--v:b_auc-->0.730<!--/v-->, APGR <!--v:b_apgr-->0.681<!--/v-->, and 95% of big's quality needs <!--v:b_cpt95-->60%<!--/v--> of calls on the big model (<!--v:b_op_cost-->66%<!--/v--> of the all-big cost, <!--v:b_op_quality-->95.0%<!--/v--> of its quality). Advantage over random routing at 30% to big: <!--v:b_adv30-->+0.066 [+0.060, +0.072]<!--/v-->.
+Pair B, <!--v:small_b-->`mistralai/mixtral-8x7b-chat`<!--/v--> against the same big model, has a wider quality gap (always-small quality <!--v:b_small_q-->0.551<!--/v-->): AUC <!--v:b_auc-->0.730<!--/v-->, APGR <!--v:b_apgr-->0.681<!--/v-->, and 95% of big's quality needs <!--v:b_cpt95-->60%<!--/v--> of calls on the big model (<!--v:b_op_cost-->66%<!--/v--> of the all-big cost, <!--v:b_op_quality-->95.0%<!--/v--> of its quality). Advantage over random routing at 30% to big: <!--v:b_adv30-->+0.066 [+0.060, +0.072]<!--/v-->.
 
 Model comparison (4-fold CV on the development data, target "small model fails", pair A; calibration happens inside each fold):
 
@@ -108,7 +115,7 @@ The same test for pair B (mean APGR <!--v:b_lofo_mean_apgr-->0.512<!--/v-->):
 
 ### Live: a small local pair on this machine
 
-`<!--v:live_small-->Qwen2.5-0.5B-Instruct<!--/v-->` (small) and `<!--v:live_big-->Qwen2.5-1.5B-Instruct<!--/v-->` (big) answered <!--v:live_n-->3,000<!--/v--> multiple-choice questions (<!--v:live_per-->750<!--/v--> each from ARC-Easy, ARC-Challenge, CommonsenseQA and MMLU; licences CC-BY-SA-4.0, CC-BY-SA-4.0, MIT and MIT, as stated on the dataset cards) with the same prompt and the same forced answer prefix ("The correct answer is", so the letter comes out within four tokens), on a <!--v:live_dev-->NVIDIA GeForce RTX 5060 Ti (cuda)<!--/v-->, <!--v:live_dtype-->float16<!--/v-->, greedy decoding, batches of <!--v:live_batch-->32<!--/v-->, one model in memory at a time. Questions are de-duplicated across the whole pool before any split, then split by seed within each source into <!--v:live_ntr-->2,000<!--/v--> train, <!--v:live_nva-->500<!--/v--> validation and <!--v:live_nte-->500<!--/v--> test questions (<!--v:live_te_per-->125<!--/v--> per source in the test set); the analysis asserts that no prompt sits in two splits. Routers are fitted on train, chosen on validation and scored once on test. The target is "the big model is strictly right where the small one is wrong". Cost is a compute proxy (prompt tokens x parameters), not dollars.
+<!--v:live_small-->`Qwen2.5-0.5B-Instruct`<!--/v--> (small) and <!--v:live_big-->`Qwen2.5-1.5B-Instruct`<!--/v--> (big) answered <!--v:live_n-->3,000<!--/v--> multiple-choice questions (<!--v:live_per-->750<!--/v--> each from ARC-Easy, ARC-Challenge, CommonsenseQA and MMLU; licences CC-BY-SA-4.0, CC-BY-SA-4.0, MIT and MIT, as stated on the dataset cards) with the same prompt and the same forced answer prefix ("The correct answer is", so the letter comes out within four tokens), on a <!--v:live_dev-->NVIDIA GeForce RTX 5060 Ti (cuda)<!--/v-->, <!--v:live_dtype-->float16<!--/v-->, greedy decoding, batches of <!--v:live_batch-->32<!--/v-->, one model in memory at a time. Questions are de-duplicated across the whole pool before any split, then split by seed within each source into <!--v:live_ntr-->2,000<!--/v--> train, <!--v:live_nva-->500<!--/v--> validation and <!--v:live_nte-->500<!--/v--> test questions (<!--v:live_te_per-->125<!--/v--> per source in the test set); the analysis asserts that no prompt sits in two splits. Routers are fitted on train, chosen on validation and scored once on test. The target is "the big model is strictly right where the small one is wrong". Cost is a compute proxy (prompt tokens x parameters), not dollars.
 
 <!--BEGIN:live_acc-->
 | source | n | small | big | oracle |
@@ -198,9 +205,9 @@ print(r.choices[0].message.content, r.model_extra["router"])   # difficulty, tie
 
 ### Prices
 
-`config/pricing.yaml` holds list prices in US dollars per million tokens (input / output), looked up on <!--v:price_date-->2026-11-12<!--/v--> from the OpenAI pricing page. The default example pair is `<!--v:price_small_id-->gpt-6-luna<!--/v-->` at <!--v:price_small-->0.10 / 0.50<!--/v--> and `<!--v:price_big_id-->gpt-6.1-sol<!--/v-->` at <!--v:price_big-->2.00 / 10.00<!--/v-->. Prices change, so the file is meant to be edited, and it holds a commented template for an Anthropic API model rather than model ids. When the local pair runs, the gateway reports what the same tokens would cost on that pair; that is a labelled hypothetical, not a bill. These current prices are separate from the recorded November 2023 costs behind the offline results.
+`config/pricing.yaml` is an editable example table of list prices in US dollars per million tokens (input / output), with a lookup date (<!--v:price_date-->2026-11-12<!--/v-->) stored in the file. The example pair, <!--v:price_small_id-->`gpt-6-luna`<!--/v--> at <!--v:price_small-->0.10 / 0.50<!--/v--> and <!--v:price_big_id-->`gpt-6.1-sol`<!--/v--> at <!--v:price_big-->2.00 / 10.00<!--/v-->, stands in for a small and a big hosted tier. I could not verify the model ids or prices offline, so confirm both on the provider's pricing page before relying on them; prices change, which is why the file is meant to be edited. It also holds a commented template for an Anthropic API model rather than model ids. When the local pair runs, the gateway reports what the same tokens would cost on that pair; that is a labelled hypothetical, not a bill. These example prices are separate from the recorded November 2023 costs behind the offline results.
 
-### Reproduce
+## Reproduce
 
 ```bash
 python scripts/reproduce_results.py          # data, both pairs, live experiment, web data, docs build
@@ -231,11 +238,22 @@ I ran `scripts/reproduce_results.py` once from a fresh clone of the committed re
 
 At the end the script compares each regenerated file in `results/` with the committed one. All <!--v:repro_nfiles-->7<!--/v--> files (the JSON results, the test-set predictions and the live test items) regenerated identically, apart from timings (training seconds, latency, throughput and the GPU load recorded before each timing run), which depend on what else the machine is doing and differ between runs. The README numbers that depend on those timings therefore moved slightly in the clone and were not copied back. The full record, with the comparison, is in `results/reproduce.json`.
 
-### Static demo
+## Layout
 
-`docs/` is the same interface with recorded data, ready for GitHub Pages: `python -m http.server -d docs 8109`. It ships only derived per-item numbers (predicted difficulty, each tier's recorded score and cost, task label). Prompt text is shown only for sources whose dataset card gives a licence that permits redistribution, shortened, with an attribution line in the page: MMLU (Hendrycks et al., MIT licence) and GSM8K (Cobbe et al., MIT licence). Every other item shows its task label only. `scripts/ui_check.py` checks the page at 1440x900 and 390x844 (touch) and writes the screenshots in `docs/assets/`.
+```
+src/modelrouter/   data.py, features.py, train.py, evaluate.py, router.py, live.py, pricing.py, safepickle.py, cli.py
+  gateway/         FastAPI app, policies, cache, ledger, escalation
+  providers/       OpenAI and Anthropic adapters (httpx), local transformers backend
+config/            gateway.yaml (tiers, policy), pricing.yaml (editable price table)
+scripts/           data, embeddings, reproduce_results.py, check_numbers.py, build_docs.py, ui_check.py
+results/           JSON and Parquet outputs that the README numbers come from
+web/               interface source; docs/ is its static copy with recorded data
+tests/             fast offline tests (pytest -m slow adds two model tests)
+```
 
-![Phone](docs/assets/served-phone-presets.png)
+## Static demo
+
+`docs/` is the same interface with recorded data, ready for GitHub Pages: `python -m http.server -d docs 8109`. It ships only derived per-item numbers (predicted difficulty, each tier's recorded score and cost, task label). Prompt text is shown only for sources whose dataset card gives a licence that permits redistribution, shortened, with an attribution line in the page: MMLU (Hendrycks et al., MIT licence) and GSM8K (Cobbe et al., MIT licence). Every other item shows its task label only. There is no hosted copy yet; the `docs/` folder can be served by GitHub Pages. `scripts/ui_check.py` checks the page at 1440x900 and 390x844 (touch) and writes the two screenshots above to `docs/assets/`.
 
 ## Design decisions
 
@@ -250,13 +268,11 @@ At the end the script compares each regenerated file in `results/` with the comm
 - RouterBench is benchmark-style (multiple choice, maths, code), not open-ended chat traffic, and its models and prices are from late 2023.
 - The router does not generalise to unseen benchmark families (table above). Treat the headline savings as in-distribution.
 - The live experiment is one run on four multiple-choice sources with a 500-question test set, and it shows no routing benefit for the routers that can score a raw prompt. Both Qwen models may have seen these public benchmarks during training; I did not check.
-- The hosted adapters were never called against the real APIs. The prices in `config/pricing.yaml` were copied from the OpenAI pricing page on the lookup date and may have changed.
+- The hosted adapters were never called against the real APIs. The example prices and model ids in `config/pricing.yaml` are not verified here; confirm them on the provider's pricing page.
 - Latencies come from a shared GPU and are indicative; there is no CPU latency measurement.
 
 ## Data, models and licences
 
 Code: MIT (see `LICENSE`). **RouterBench** (Hu et al., 2024): the dataset card on Hugging Face carries no licence, its code repository is MIT, and the data is not included here; it is downloaded at run time. Its prompts come from public benchmarks with their own licences. Also used: sentence-transformers `all-MiniLM-L6-v2` (Apache-2.0), Qwen2.5-0.5B-Instruct and Qwen2.5-1.5B-Instruct (Apache-2.0), ARC (CC-BY-SA-4.0), CommonsenseQA (MIT) and MMLU (MIT), as stated on their Hugging Face cards. Ideas and metrics from FrugalGPT, Hybrid LLM, AutoMix and RouteLLM (CPT and APGR); see `docs/notes/research.md`.
 
----
-
-Built by [Aditya Jain](https://adityajain16.vercel.app) · [github.com/Aditya2616/ModelRouter](https://github.com/Aditya2616/ModelRouter)
+Built by [Aditya Jain](https://adityajain16.vercel.app).

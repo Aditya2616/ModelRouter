@@ -243,6 +243,10 @@ def values(D: dict) -> tuple[dict[str, str], dict[str, str]]:
     v.update(price_date=str(pr["price_date"]),
              price_small=f"{models[small]['input']:.2f} / {models[small]['output']:.2f}",
              price_big=f"{models[big]['input']:.2f} / {models[big]['output']:.2f}", price_small_id=small, price_big_id=big)
+    # model ids render as code; the backticks are part of the value so the markers stay outside them
+    # (GitHub shows a comment inside backticks as literal text)
+    for k in ("small_a", "big_a", "small_b", "big_b", "live_small", "live_big", "price_small_id", "price_big_id"):
+        v[k] = f"`{v[k]}`"
     return v, blocks
 
 

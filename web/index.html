@@ -32,7 +32,7 @@
   <section id="stream-sec">
     <div class="sec-head">
       <h2>Requests <em>split by difficulty</em></h2>
-      <div class="sec-note" id="stream-note">Each dot is a real held-out prompt, placed on the router's difficulty axis and sent to the lane the threshold picks. The readouts under the chart use every held-out prompt and update instantly.</div>
+      <div class="sec-note" id="stream-note">Each dot is a real held-out prompt, placed on the router's difficulty axis and sent to the lane the threshold picks. The readouts beside the chart use every held-out prompt at the current threshold and update instantly; the dots are a stream of those same prompts, and the counter shows how many have streamed.</div>
     </div>
     <div class="grid2">
       <div>
@@ -41,7 +41,7 @@
           <div class="stage-bar">
             <button class="btn primary" id="play-btn" aria-pressed="true">Pause</button>
             <span class="seg" role="group" aria-label="Stream speed"><button class="btn" data-speed="1" aria-pressed="true">1x</button><button class="btn" data-speed="4" aria-pressed="false">4x</button><button class="btn" data-speed="16" aria-pressed="false">16x</button></span>
-            <button class="btn" id="reset-btn">Reset meter</button>
+            <button class="btn" id="reset-btn">Clear dots</button>
             <span class="spacer"></span>
             <span class="mono sec-note" id="stream-count"></span>
           </div>
@@ -66,7 +66,7 @@
       </div>
       <div class="panel">
         <div class="meter" aria-live="polite">
-          <div class="sec-note" style="margin-bottom:-2px">COST METER · cost per 1,000 requests</div>
+          <div class="sec-note" style="margin-bottom:-2px" id="meter-title">COST METER · per 1,000 requests</div>
           <div class="bar-row"><span>All big</span><div class="bar ref"><i id="bar-big"></i></div><span class="bar-val" id="val-big">$0</span></div>
           <div class="bar-row"><span>Routed</span><div class="bar"><i id="bar-routed"></i></div><span class="bar-val" id="val-routed">$0</span></div>
         </div>

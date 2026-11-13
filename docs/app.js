@@ -228,24 +228,34 @@ const stream = (() => {
     }
     return oc;
   }
+  let fullFor = null, full = null;
+  function fullSet() { // readouts over every held-out prompt at the current threshold, not over the dots streamed so far
+    if (full && fullFor === thr) return full;
+    const e = S.ev, a = e.at(thr);
+    let miss = 0;
+    for (let i = 0; i < e.n; i++) if (outcome(i, e.p[i] >= thr) === "miss") miss++;
+    full = { big: e.cb * 1000, routed: a.cost * 1000, save: 1 - a.cost / e.cb, qual: a.quality / e.qb, frac: a.frac, miss };
+    fullFor = thr;
+    return full;
+  }
   function meter() {
-    const per = tot.n || 1;
-    const big = tot.bigCost / per * 1000, routed = tot.cost / per * 1000;
-    $("#bar-big").style.width = tot.n ? "100%" : "0%";
-    $("#bar-routed").style.width = tot.n ? clamp(routed / big, 0, 1) * 100 + "%" : "0%";
-    $("#val-big").textContent = tot.n ? usd(big) : "$0"; $("#val-routed").textContent = tot.n ? usd(routed) : "$0";
-    $("#st-save").textContent = tot.n ? pct(1 - routed / big, 0) : "0%";
-    $("#st-qual").textContent = tot.n ? pct(tot.q / tot.bigQ, 1) : "0%";
-    $("#st-big").textContent = tot.n ? pct(tot.big / tot.n, 0) : "0%";
-    $("#st-miss").textContent = tot.miss;
-    $("#stream-count").textContent = tot.n.toLocaleString() + " requests";
+    const f = fullSet();
+    $("#meter-title").textContent = `COST METER · per 1,000 requests · all ${S.ev.n.toLocaleString()} held-out prompts`;
+    $("#bar-big").style.width = "100%";
+    $("#bar-routed").style.width = clamp(f.routed / f.big, 0, 1) * 100 + "%";
+    $("#val-big").textContent = usd(f.big); $("#val-routed").textContent = usd(f.routed);
+    $("#st-save").textContent = pct(f.save, 0);
+    $("#st-qual").textContent = pct(f.qual, 1);
+    $("#st-big").textContent = pct(f.frac, 0);
+    $("#st-miss").textContent = f.miss.toLocaleString();
+    $("#stream-count").textContent = tot.n.toLocaleString() + " streamed";
   }
   let meterDirty = false;
   function setThreshold(t) {
     thr = t;
     if (!S.ev || !cv) return;
     if (reduceMotion) { staticFill(); draw(); return; }
-    clearTotals(); meterDirty = true;     // the meter restarts so it always reflects the current threshold
+    clearTotals(); meterDirty = true;     // the streamed count restarts at each new threshold; the readouts are whole-set
     const g = geo(), k = clamp(W / 700, 0.62, 1.15);
     for (const q of parts) { // dots already on their way to a lane are re-routed from where they are
       if (q.lane < 0) continue;
