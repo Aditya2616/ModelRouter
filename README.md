@@ -2,7 +2,7 @@
 
 Easy questions go to a small model, hard ones to a big model. A small scikit-learn classifier predicts, before any LLM runs, whether the cheap model will be good enough. An OpenAI-compatible gateway uses that score to route each request and keeps a ledger of what it saved.
 
-![ModelRouter UI on desktop](docs/assets/served-desktop-top.png)
+![The request stream mid-flow on desktop](docs/assets/served-desktop-stream.png)
 
 The `docs/` folder is a static copy of the interface that replays recorded results, so it can be hosted on GitHub Pages with no backend (see [Static demo](#static-demo)).
 
@@ -235,7 +235,7 @@ At the end the script compares each regenerated file in `results/` with the comm
 
 `docs/` is the same interface with recorded data, ready for GitHub Pages: `python -m http.server -d docs 8109`. It ships only derived per-item numbers (predicted difficulty, each tier's recorded score and cost, task label). Prompt text is shown only for sources whose dataset card gives a licence that permits redistribution, shortened, with an attribution line in the page: MMLU (Hendrycks et al., MIT licence) and GSM8K (Cobbe et al., MIT licence). Every other item shows its task label only. `scripts/ui_check.py` checks the page at 1440x900 and 390x844 (touch) and writes the screenshots in `docs/assets/`.
 
-![Phone](docs/assets/served-phone-top.png)
+![Phone](docs/assets/served-phone-presets.png)
 
 ## Design decisions
 

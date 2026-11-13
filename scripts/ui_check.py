@@ -51,7 +51,8 @@ def run(url: str, prefix: str) -> dict:
             page = ctx.new_page()
             errors: list[str] = []
             bad: list[str] = []
-            page.on("console", lambda m, e=errors: e.append(m.text) if m.type in ("error", "warning") else None)
+            # the getImageData warning comes from this script's own pixel probe, not from the page
+            page.on("console", lambda m, e=errors: e.append(m.text) if m.type in ("error", "warning") and "getImageData" not in m.text else None)
             page.on("pageerror", lambda x, e=errors: e.append(str(x)))
             page.on("response", lambda r, e=bad: e.append(f"{r.status} {r.url}") if r.status >= 400 else None)
             page.on("requestfailed", lambda r, e=bad: e.append(f"failed {r.url}"))
@@ -59,7 +60,7 @@ def run(url: str, prefix: str) -> dict:
             page.wait_for_timeout(4000)  # let the stream fill: the first screenshot shows it mid-flow
             page.screenshot(path=f"{prefix}-{name}-top.png")
             r = {"console_errors": errors, "bad_requests": bad, "mode": page.inner_text("#mode-badge"),
-                 "horizontal_overflow": page.evaluate("document.documentElement.scrollWidth > window.innerWidth"),
+                 "horizontal_overflow": page.evaluate("document.body.scrollWidth > document.documentElement.clientWidth || document.documentElement.scrollWidth > document.documentElement.clientWidth"),
                  "small_targets": page.evaluate(SMALL_TARGETS_JS), "fps": {}}
             for sp in ("1", "4", "16"):
                 page.click(f'[data-speed="{sp}"]')
@@ -76,12 +77,17 @@ def run(url: str, prefix: str) -> dict:
                                 "pressed": page.get_attribute(f'[data-preset="{preset}"]', "aria-pressed")}
             r["preset_states"] = seen
             r["rerouting_changes_colours"] = seen["0"]["colours"] != seen["1"]["colours"]
-            page.evaluate("window.scrollTo(0, 0)")
-            page.locator(".presets").scroll_into_view_if_needed()
-            page.locator(".slider-box").screenshot(path=f"{prefix}-{name}-presets.png")
+            page.click('[data-speed="1"]')
+            page.evaluate("document.querySelector('.slider-box').scrollIntoView({block: 'center'})")
+            page.wait_for_timeout(800)
+            page.screenshot(path=f"{prefix}-{name}-presets.png")  # viewport: stage, slider and preset chips
             for tid in ("#metrics-table", "#lofo-table", "#live-table"):
-                page.locator(tid).scroll_into_view_if_needed()
-                page.locator(tid).screenshot(path=f"{prefix}-{name}-{tid[1:]}.png")
+                page.evaluate(f"document.querySelector('{tid}').scrollIntoView({{block: 'center'}})")
+                page.wait_for_timeout(800)
+                page.screenshot(path=f"{prefix}-{name}-{tid[1:]}.png")
+            page.evaluate("document.querySelector('#stream').scrollIntoView({block: 'center'})")
+            page.wait_for_timeout(2500)
+            page.screenshot(path=f"{prefix}-{name}-stream.png")  # the stream mid-flow
             page.evaluate("window.scrollTo(0, 0)")
             page.wait_for_timeout(500)
             page.screenshot(path=f"{prefix}-{name}-full.png", full_page=True)
