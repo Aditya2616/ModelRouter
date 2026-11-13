@@ -1,4 +1,4 @@
-"""Local backend: small open models through transformers, on CPU.
+"""Local backend: small open models through transformers (CUDA in float16 when available, else the CPU).
 
 This is the path that is genuinely exercised end to end on this machine.
 """
@@ -109,3 +109,42 @@ class LocalProvider:
                 mean_logprob=(sum(lps) / len(lps)) if lps else None,
                 latency_s=time.perf_counter() - t0,
             )
+
+    def complete_batch(self, model: str, prompts: list[str], max_tokens: int = 4, prefix: str = "",
+                       batch_size: int = 32) -> list[Completion]:
+        """Greedy completion of many single-turn prompts at once (left-padded batches, sorted by length).
+
+        Same chat template and forced `prefix` as `complete`. `latency_s` of each result is its batch's wall time
+        divided by the batch size, so it is a throughput figure, not the latency of a lone request."""
+        import torch
+
+        with self._lock:
+            tok, lm = self._load(model)
+            tok.padding_side = "left"
+            texts = [tok.apply_chat_template([{"role": "user", "content": p}], add_generation_prompt=True, tokenize=False)
+                     + prefix for p in prompts]
+            order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
+            out: list[Completion | None] = [None] * len(texts)
+            eos = {tok.eos_token_id, tok.pad_token_id}
+            for s in range(0, len(order), batch_size):
+                idx = order[s:s + batch_size]
+                enc = tok([texts[i] for i in idx], return_tensors="pt", padding=True)
+                enc = {k: v.to(self.device) for k, v in enc.items()}
+                width = enc["input_ids"].shape[1]
+                t0 = time.perf_counter()
+                with torch.inference_mode():
+                    gen = lm.generate(**enc, max_new_tokens=max_tokens, do_sample=False, return_dict_in_generate=True,
+                                      output_scores=True, pad_token_id=tok.eos_token_id)
+                if self.device.startswith("cuda"):
+                    torch.cuda.synchronize()
+                per = (time.perf_counter() - t0) / len(idx)
+                n_prompt = enc["attention_mask"].sum(dim=1).tolist()
+                for row, i in enumerate(idx):
+                    seq = gen.sequences[row, width:].tolist()
+                    cut = next((k for k, t in enumerate(seq) if t in eos), len(seq))
+                    lps = [torch.log_softmax(gen.scores[k][row].float(), dim=-1)[seq[k]].item() for k in range(cut)]
+                    out[i] = Completion(
+                        text=tok.decode(seq[:cut], skip_special_tokens=True).strip(), prompt_tokens=int(n_prompt[row]),
+                        completion_tokens=cut, model=model, finish_reason="stop" if cut < len(seq) else "length",
+                        mean_logprob=(sum(lps) / len(lps)) if lps else None, latency_s=per)
+            return out  # type: ignore[return-value]

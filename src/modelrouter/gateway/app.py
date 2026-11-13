@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -84,6 +85,8 @@ def _build_provider(name: str, cache: dict):
                        "stub": StubProvider}[name]()
     return cache[name]
 
+log = logging.getLogger("modelrouter")
+
 
 def gateway_from_config(cfg: dict, pricing: PriceTable, router: DifficultyRouter, ledger_path: str = ":memory:",
                         providers: dict | None = None) -> Gateway:
@@ -119,7 +122,12 @@ def create_app(gateway: Gateway | None = None, eval_store: EvalStore | None = No
             cfg_file = Path(config_path or os.environ.get("MODELROUTER_CONFIG", ROOT / "config/gateway.yaml"))
             cfg = yaml.safe_load(cfg_file.read_text(encoding="utf-8"))
             pricing = PriceTable.load(os.environ.get("MODELROUTER_PRICING", ROOT / "config/pricing.yaml"))
-            router = DifficultyRouter.load(ROOT / "models" / f"router_{cfg['router_pair']}.joblib")
+            pair = cfg["router_pair"]
+            if not (ROOT / "models" / f"router_{pair}.joblib").exists() and cfg.get("router_fallback"):
+                pair = cfg["router_fallback"]   # e.g. the local-pair router needs `modelrouter live` first
+                log.warning("router for %s not found (run `modelrouter live`); using %s", cfg["router_pair"], pair)
+            router = DifficultyRouter.load(ROOT / "models" / f"router_{pair}.joblib")
+            state["router_pair"] = pair
             db = os.environ.get("MODELROUTER_DB", str(ROOT / "data/ledger.sqlite"))
             Path(db).parent.mkdir(exist_ok=True)
             state["gw"], state["cfg"] = gateway_from_config(cfg, pricing, router, db), cfg
@@ -136,7 +144,7 @@ def create_app(gateway: Gateway | None = None, eval_store: EvalStore | None = No
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "router_loaded": state["gw"] is not None}
+        return {"status": "ok", "router_loaded": state["gw"] is not None, "router": state.get("router_pair")}
 
     @app.get("/v1/models")
     def models():

@@ -392,7 +392,7 @@ function drawAllCharts() {
   drawCurve($("#curve"), { curve: o.test_curve, band: o.test_random_band, oracle: o.test_oracle_curve,
     ymin: Math.floor((Math.min(...qs) - 0.01) * 20) / 20, ymax: Math.ceil((Math.max(...qs) + 0.01) * 20) / 20, marker: a });
   if (S.live) {
-    const L = S.live, rc = L.router_cv.curve;
+    const L = S.live, rc = L.local.curve;
     const lo = Math.min(...rc.quality, ...L.random_band.lo), hi = Math.max(...rc.quality, ...L.random_band.hi);
     drawCurve($("#live-curve"), { curve: rc, band: L.random_band, ymin: Math.floor((lo - 0.02) * 20) / 20, ymax: Math.ceil((hi + 0.02) * 20) / 20 });
   }
@@ -449,10 +449,14 @@ function initTables() {
     const L = S.live, rows2 = [];
     const pick = (n, name) => L[n] && rows2.push(row([name, fmt(L[n].auc), fmt(L[n].apgr), pct(L[n].cpt95),
       `${fmt(L[n].advantage_vs_random["30%"].mean, 3)} [${fmt(L[n].advantage_vs_random["30%"].lo, 3)}, ${fmt(L[n].advantage_vs_random["30%"].hi, 3)}]`]));
-    pick("router_cv", "router (5-fold CV)"); pick("source_prior", "benchmark identity only"); pick("routerbench_transfer", "RouterBench router, transferred");
-    $("#live-table").innerHTML = head(["router", "AUC", "APGR", "CPT95", "vs random @30%"]) + "<tbody>" + rows2.join("") + "</tbody>";
-    const run = L.run || {};
-    $("#live-note").textContent = `${L.n} multiple-choice questions on ${run.gpu || run.device || "one device"} (${run.dtype || "?"}), one request at a time. ${L.small.split("/")[1]} accuracy ${pct(L.accuracy.small, 1)}, ${L.big.split("/")[1]} ${pct(L.accuracy.big, 1)}, oracle ${pct(L.accuracy.oracle, 1)}. Mean latency ${fmt(L.mean_latency_s.small, 2)} s vs ${fmt(L.mean_latency_s.big, 2)} s per question; these are ${run.device === "cuda" ? "GPU" : "CPU"} figures, measured while the machine was shared with other jobs. The cost proxy is compute (parameters x tokens), not dollars.`;
+    pick("local", "trained on the local labels"); pick("source_prior", "benchmark identity only"); pick("routerbench_transfer", "RouterBench router, transferred");
+    $("#live-table").innerHTML = head(["router (test set)", "AUC", "APGR", "CPT95", "vs random @30%"]) + "<tbody>" + rows2.join("") + "</tbody>";
+    const run = L.run || {}, dev = run.device === "cuda" ? "GPU" : "CPU", la = L.latency, tsm = L.split.test.n;
+    const ms = (t) => Math.round(la[t].single.mean_s * 1000);
+    $("#live-note").textContent = `${L.n} multiple-choice questions on ${run.gpu || run.device || "one device"} (${run.dtype || "?"}), split ${L.split.train.n} / ${L.split.val.n} / ${tsm} into train / validation / test; the table is the ${tsm} test questions. ` +
+      `Accuracy on all ${L.n}: ${L.small.split("/")[1]} ${pct(L.accuracy.small, 1)}, ${L.big.split("/")[1]} ${pct(L.accuracy.big, 1)}, oracle ${pct(L.accuracy.oracle, 1)}. ` +
+      `Single-request latency (${la.small.single.n} questions, batch of 1): ${ms("small")} ms vs ${ms("big")} ms; these are ${dev} figures, measured while the machine was shared with other jobs. ` +
+      `The cost proxy is compute (parameters x tokens), not dollars.`;
   } else $("#live-sec").hidden = true;
 }
 

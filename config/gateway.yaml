@@ -1,13 +1,14 @@
 # Gateway configuration. Environment variables OPENAI_API_KEY / ANTHROPIC_API_KEY enable hosted tiers.
-router_pair: gpt35_vs_gpt4         # trained difficulty model in models/ (see README: the router trained on only 240 local labels learned nothing useful)
+router_pair: local_qwen            # trained difficulty model in models/ (written by `modelrouter live`); chosen on validation data, see README
+router_fallback: gpt35_vs_gpt4     # used when models/router_<router_pair>.joblib does not exist yet
 eval_pair: gpt35_vs_gpt4            # offline RouterBench evaluation shown in the UI
 tiers:
   small: {provider: local, model: Qwen/Qwen2.5-0.5B-Instruct, price_as: gpt-6-luna}
   big:   {provider: local, model: Qwen/Qwen2.5-1.5B-Instruct, price_as: gpt-6.1-sol}
 policy:
-  kind: threshold                   # threshold | fraction | budget
-  threshold: 0.5                    # send to big when predicted difficulty >= threshold
-  target_big_fraction: 0.35         # for kind: fraction
+  kind: fraction                    # threshold | fraction | budget
+  threshold: 0.3                    # send to big when predicted difficulty >= threshold (also the fraction policy's warm-up value)
+  target_big_fraction: 0.3          # for kind: fraction
   budget_usd_per_1k: 1.0            # for kind: budget (USD per 1,000 requests)
 escalation:
   enabled: true

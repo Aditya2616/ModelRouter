@@ -58,7 +58,7 @@ Chosen pair for the headline curve: **gpt-3.5-turbo-1106 (small) vs gpt-4-1106-p
 
 Qwen2.5-3B is excluded (research licence). 0.5B and 1.5B are the same family so the quality gap is real but modest; CPU generation (6 torch threads, 12 cores) is the practical limit, so the live experiment uses short outputs (multiple-choice letter or a short number) and a few hundred prompts. A Qwen3-0.6B copy exists in the cache and can be a fallback.
 
-Live-experiment ground truth: RouterBench has no gold answers, so the local experiment uses items with known answers from permissive sets (ARC-Easy and ARC-Challenge, CC-BY-SA; CommonsenseQA from `tau/commonsense_qa`, MIT; MMLU, MIT; GSM8K was considered but multiple-choice letters keep generation to a few tokens on CPU). Router for the local pair is retrained on the local pair's own small/big correctness labels with cross-validation, and I also report how the RouterBench-trained router transfers (expected: weaker, since it learned the GPT-3.5/GPT-4 pair).
+Live-experiment ground truth: RouterBench has no gold answers, so the local experiment uses items with known answers from permissive sets (ARC-Easy and ARC-Challenge, CC-BY-SA; CommonsenseQA from `tau/commonsense_qa`, MIT; MMLU, MIT; GSM8K was considered but multiple-choice letters keep generation to a few tokens). Router for the local pair is retrained on the local pair's own small/big correctness labels (train split, model chosen on a validation split, scored on a test split), and I also report how the RouterBench-trained router transfers (expected: weaker, since it learned the GPT-3.5/GPT-4 pair).
 
 ## 4. Methods for the classifier
 

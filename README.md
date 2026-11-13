@@ -106,38 +106,66 @@ The same test for pair B (mean APGR <!--v:b_lofo_mean_apgr-->0.512<!--/v-->):
 | winogrande | 1,267 | 0.502 | 0.500 | +0.002 [-0.011, +0.015] |
 <!--END:lofo_b-->
 
-### Live: a small local pair on this machine (a demonstration, not evidence)
+### Live: a small local pair on this machine
 
-`<!--v:live_small-->Qwen2.5-0.5B-Instruct<!--/v-->` (small) and `<!--v:live_big-->Qwen2.5-1.5B-Instruct<!--/v-->` (big) answered <!--v:live_n-->300<!--/v--> multiple-choice questions (<!--v:live_per-->75<!--/v--> each from ARC-Easy, ARC-Challenge, CommonsenseQA and MMLU) through the same provider code the gateway uses: one model in memory at a time, one request at a time, on a <!--v:live_dev-->NVIDIA GeForce RTX 5060 Ti (cuda)<!--/v-->, <!--v:live_dtype-->float16<!--/v-->, <!--v:live_threads-->2<!--/v--> CPU threads, greedy decoding. The reply is forced to start with "The correct answer is" so the letter is emitted within four tokens.
+`<!--v:live_small-->Qwen2.5-0.5B-Instruct<!--/v-->` (small) and `<!--v:live_big-->Qwen2.5-1.5B-Instruct<!--/v-->` (big) answered <!--v:live_n-->3,000<!--/v--> multiple-choice questions (<!--v:live_per-->750<!--/v--> each from ARC-Easy, ARC-Challenge, CommonsenseQA and MMLU; licences CC-BY-SA-4.0, CC-BY-SA-4.0, MIT and MIT, as stated on the dataset cards) with the same prompt and the same forced answer prefix ("The correct answer is", so the letter comes out within four tokens), on a <!--v:live_dev-->NVIDIA GeForce RTX 5060 Ti (cuda)<!--/v-->, <!--v:live_dtype-->float16<!--/v-->, greedy decoding, batches of <!--v:live_batch-->32<!--/v-->, one model in memory at a time. Questions are de-duplicated across the whole pool before any split, then split by seed within each source into <!--v:live_ntr-->2,000<!--/v--> train, <!--v:live_nva-->500<!--/v--> validation and <!--v:live_nte-->500<!--/v--> test questions (<!--v:live_te_per-->125<!--/v--> per source in the test set); the analysis asserts that no prompt sits in two splits. Routers are fitted on train, chosen on validation and scored once on test. The target is "the big model is strictly right where the small one is wrong". Cost is a compute proxy (prompt tokens x parameters), not dollars.
 
 <!--BEGIN:live_acc-->
-| source | n | small | big |
-|---|---|---|---|
-| arc-challenge | 75 | 56.0% | 77.3% |
-| arc-easy | 75 | 70.7% | 92.0% |
-| commonsenseqa | 75 | 54.7% | 76.0% |
-| mmlu | 75 | 48.0% | 68.0% |
-| **all** | 300 | 57.3% | 78.3% |
-| oracle (best of the two per question) | 300 | 82.0% | |
+| source | n | small | big | oracle |
+|---|---|---|---|---|
+| arc-challenge | 750 | 49.9% | 76.1% | 80.8% |
+| arc-easy | 750 | 70.5% | 90.4% | 92.3% |
+| commonsenseqa | 750 | 52.7% | 69.9% | 77.2% |
+| mmlu | 750 | 46.7% | 59.9% | 69.7% |
+| **all** | 3,000 | 54.9% | 74.1% | 80.0% |
+| **test split only** | 500 | 53.4% | 70.8% | 78.2% |
 <!--END:live_acc-->
 
-The big model was strictly better on <!--v:live_strict_n-->74<!--/v--> of <!--v:live_n-->300<!--/v--> questions (<!--v:live_strict-->25%<!--/v-->). Mean end-to-end latency per question was <!--v:live_lat_s-->1.04<!--/v--> s (small) and <!--v:live_lat_b-->1.84<!--/v--> s (big), on average <!--v:live_ptok-->111<!--/v--> prompt tokens, which is <!--v:live_tps_s-->107<!--/v--> and <!--v:live_tps_b-->60<!--/v--> prompt tokens per second. These are GPU figures, measured while the GPU and CPU were shared with other jobs, so they are indicative only; I did not measure CPU latency for this set. Cost for the local pair is a compute proxy (prompt tokens x parameters), not dollars.
+The big model was strictly better on <!--v:live_strict_n-->752<!--/v--> of <!--v:live_n-->3,000<!--/v--> questions (<!--v:live_strict-->25%<!--/v-->), so the oracle that always picks the better model reaches <!--v:live_acc_o-->80.0%<!--/v--> and a router that never wastes a big-model call would need only <!--v:live_oracle_cpt95-->14%<!--/v--> of calls on the big model to keep 95% of its accuracy on the test set.
 
 <!--BEGIN:live_router-->
-| router for this pair | AUC | APGR | advantage vs random at 30% [95% CI] |
-|---|---|---|---|
-| trained on the local labels, 5-fold CV | 0.493 | 0.492 | -0.018 [-0.046, +0.010] |
-| benchmark identity only | 0.525 | 0.485 | -0.003 [-0.029, +0.023] |
-| RouterBench router, transferred | 0.477 | 0.438 | -0.020 [-0.047, +0.008] |
+| router for this pair (test set) | AUC | APGR | CPT 95% | advantage vs random at 30% | validation APGR |
+|---|---|---|---|---|---|
+| trained on the local labels | 0.463 [0.406, 0.524] | 0.474 [0.392, 0.555] | 85% [62%, 90%] | -0.007 [-0.026, +0.016] | 0.520 |
+| benchmark identity only | 0.548 [0.486, 0.605] | 0.533 [0.462, 0.603] | 82% [72%, 87%] | +0.023 [+0.004, +0.044] | 0.554 |
+| RouterBench router, transferred | 0.478 [0.423, 0.542] | 0.382 [0.276, 0.469] | 84% [77%, 93%] | -0.028 [-0.052, -0.004] | 0.473 |
+| oracle (upper bound) | | | 14% | | |
 <!--END:live_router-->
 
-**Negative result.** With <!--v:live_n-->300<!--/v--> labels and four similar benchmarks, no router beats random routing here: every interval includes zero and the cross-validated router's AUC is <!--v:live_cv_auc-->0.493<!--/v-->. This experiment shows the mechanism end to end (two real models, real correctness labels, real latencies), not that routing helps for this pair. The gateway's default router is therefore the one trained on RouterBench, applied to the local pair as a demonstration of the plumbing.
+Intervals are 95% bootstrap intervals over the <!--v:live_nte-->500<!--/v--> test questions. "Trained on the local labels" is a calibrated <!--v:live_local_chosen-->lr_C0.01<!--/v--> on MiniLM embeddings plus lexical features, picked from seven candidates (six logistic regressions and gradient boosting) by validation APGR. The benchmark-identity row predicts each question's chance from its source alone, so it is **not deployable** in a gateway (a request does not arrive labelled with its benchmark); it is there to show what knowing the source is worth. The transferred row applies the pair-A RouterBench router unchanged.
+
+**What this shows.** Of the routers that can score a raw prompt, none beats random routing on the test set: the locally trained router's advantage over random at 30% to big is <!--v:live_local_adv-->-0.007 [-0.026, +0.016]<!--/v--> (its AUC is <!--v:live_local_auc-->0.463<!--/v-->) and the transferred RouterBench router is significantly worse than random (<!--v:live_tr_adv-->-0.028 [-0.052, -0.004]<!--/v-->). The only router with an interval above zero is the benchmark-identity one, which needs the label. That matches the offline finding that most of the skill is recognising the benchmark: here the source label is worth a little (the one row above zero) and the embedding adds nothing on top of it. I did not investigate further why the 1.5B model's gains are unpredictable from the question text. It is a negative result for this pair and these questions, not a claim that routing cannot help.
+
+Holding one source out entirely (train on the other three, test on all <!--v:live_src_n-->750<!--/v--> questions of the fourth, same model type):
+
+<!--BEGIN:live_lofo-->
+| held-out source | n | AUC | APGR | advantage vs random at 30% [95% CI] |
+|---|---|---|---|---|
+| arc-challenge | 750 | 0.507 | 0.521 | -0.002 [-0.018, +0.016] |
+| arc-easy | 750 | 0.534 | 0.534 | +0.011 [-0.004, +0.025] |
+| commonsenseqa | 750 | 0.498 | 0.520 | +0.004 [-0.013, +0.019] |
+| mmlu | 750 | 0.495 | 0.483 | -0.003 [-0.021, +0.016] |
+<!--END:live_lofo-->
+
+**Which router the gateway uses.** The default is the router trained on the local labels (`router_pair: local_qwen` in `config/gateway.yaml`, written by `modelrouter live`; the gateway falls back to the RouterBench router if that file does not exist yet). It was chosen because, among the routers that score a raw prompt, it has the best validation APGR (<!--v:live_val_local-->0.520<!--/v--> against <!--v:live_val_tr-->0.473<!--/v--> for the transferred one; the choice used no test data). "Best" here means least bad: its test advantage over random is indistinguishable from zero, so for this pair the gateway's routing is, within error, as good as a coin flip at the same big-model share. Its policy is the fraction policy at <!--v:gw_frac-->30%<!--/v--> big. Use it as a demonstration of the plumbing, and expect no saving that you could not get by splitting traffic at random.
+
+Latency and throughput on the GPU (measured while the machine was shared with other jobs; just before each timing run the GPU was <!--v:live_gpu_util_s-->27<!--/v-->% busy with <!--v:live_gpu_mem_s-->4,908<!--/v--> MiB in use by other processes, so treat these as indicative):
+
+<!--BEGIN:live_latency-->
+| tier | single request, mean / median / 95th percentile | prompt tokens per second, single | questions per second, batches of 32 |
+|---|---|---|---|
+| small (Qwen2.5-0.5B-Instruct) | 107 / 100 / 133 ms | 932 | 160 |
+| big (Qwen2.5-1.5B-Instruct) | 120 / 113 / 149 ms | 826 | 73 |
+<!--END:live_latency-->
+
+A single request is only <!--v:live_lat_ratio-->1.1<!--/v-->x slower on the big model (<!--v:live_lat_s-->107<!--/v--> ms against <!--v:live_lat_b-->120<!--/v--> ms, averages over <!--v:live_lat_n-->120<!--/v--> test questions, mean <!--v:live_ptok1-->99<!--/v--> prompt tokens), because a 100-token prefill on a modern GPU is dominated by per-step overhead rather than model size. The size difference shows up when the GPU is busy: batched, the small model answers <!--v:live_bat_ratio-->2.2<!--/v-->x as many questions per second. I did not measure CPU latency for this set.
 
 ## What was exercised for real
 
 | path | status |
 |---|---|
 | RouterBench loading, classifier training, offline evaluation | run end to end here; numbers above |
+| Live experiment: both Qwen models on 3,000 questions, three routers compared on a held-out test split | run end to end here on the GPU (float16); numbers above |
 | Local Qwen pair behind the gateway (playground, ledger, cache) | run end to end here |
 | OpenAI and Anthropic API adapters | **tested against stubbed HTTP only** (`httpx.MockTransport`); never called against the live APIs, because I had no keys |
 | Escalation, cache, policies, ledger | unit tests with stub providers, plus the local pair |
@@ -151,6 +179,7 @@ pip install -e ".[dev]"
 modelrouter data                      # downloads RouterBench 0-shot (~100 MB), checks its SHA-256, writes data/routerbench_slim.parquet
 python scripts/embed_routerbench.py   # MiniLM embeddings of the prompts (resumable)
 modelrouter train --pair gpt35_vs_gpt4
+modelrouter live                      # optional: 3,000 questions through both Qwen models, trains the local router (~4 GB of models; minutes on a GPU, long on a CPU)
 modelrouter serve                     # http://127.0.0.1:8109
 ```
 
@@ -201,9 +230,9 @@ Run `scripts/embed_routerbench.py` first, otherwise `train` embeds the prompts i
 
 - RouterBench is benchmark-style (multiple choice, maths, code), not open-ended chat traffic, and its models and prices are from late 2023.
 - The router does not generalise to unseen benchmark families (table above). Treat the headline savings as in-distribution.
-- The live experiment is small (one run, four multiple-choice sources) and shows no routing benefit.
+- The live experiment is one run on four multiple-choice sources with a 500-question test set, and it shows no routing benefit for the routers that can score a raw prompt. Both Qwen models may have seen these public benchmarks during training; I did not check.
 - The hosted adapters were never called against the real APIs. The prices in `config/pricing.yaml` were copied from the OpenAI pricing page on the lookup date and may have changed.
-- Latencies come from a shared GPU.
+- Latencies come from a shared GPU and are indicative; there is no CPU latency measurement.
 
 ## Data, models and licences
 

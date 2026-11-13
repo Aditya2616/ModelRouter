@@ -54,3 +54,28 @@ def test_eval_store_reroutes_with_threshold(tmp_path):
     assert hi["frac_big"] == 0.0 and hi["quality"] == 0.5 and hi["cost"] == 1.0
     mid = s.route(0.5)  # prompts 5..9 go big, 0..4 stay small and are wrong
     assert mid["frac_big"] == 0.5 and mid["quality"] == pytest.approx(0.5)
+
+
+def test_source_prior_uses_training_rates_only():
+    from modelrouter.live import _source_prior
+
+    tr_src = np.array(["a", "a", "b", "b"])
+    y = np.array([1, 1, 0, 1])
+    p = _source_prior(tr_src, y, np.array(["b", "a", "a"]))
+    assert p.tolist() == [0.5, 1.0, 1.0]
+
+
+def test_bootstrap_interval_contains_point_estimate_for_informative_scores():
+    from modelrouter import evaluate as ev
+    from modelrouter.live import _bootstrap, _scores
+
+    rng = np.random.default_rng(0)
+    n = 400
+    y = (rng.random(n) < 0.3).astype(int)
+    s = (rng.random(n) < 0.5).astype(float)
+    o = ev.Outcomes(s, np.maximum(s, y).astype(float), np.ones(n), np.full(n, 5.0))
+    p = y * 0.6 + rng.random(n) * 0.5
+    iv = _bootstrap(p, o, y, n_boot=100)
+    pt = _scores(p, o, y)
+    assert iv["auc"]["lo"] <= pt["auc"] <= iv["auc"]["hi"]
+    assert iv["apgr"]["lo"] <= pt["apgr"] <= iv["apgr"]["hi"]
