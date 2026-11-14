@@ -277,4 +277,9 @@ tests/             fast offline tests (pytest -m slow adds two model tests)
 
 Code: MIT (see `LICENSE`). **RouterBench** (Hu et al., 2024): the dataset card on Hugging Face carries no licence, its code repository is MIT, and the data is not included here; it is downloaded at run time. Its prompts come from public benchmarks with their own licences. Also used: sentence-transformers `all-MiniLM-L6-v2` (Apache-2.0), Qwen2.5-0.5B-Instruct and Qwen2.5-1.5B-Instruct (Apache-2.0), ARC (CC-BY-SA-4.0), CommonsenseQA (MIT) and MMLU (MIT), as stated on their Hugging Face cards. Ideas and metrics from FrugalGPT, Hybrid LLM, AutoMix and RouteLLM (CPT and APGR); see `docs/notes/research.md`.
 
+## Authors
+
+- [Aditya Jain](https://github.com/Aditya2616)
+- [Sneha Singh](https://github.com/snehasingh2608)
+
 Built by [Aditya Jain](https://adityajain16.vercel.app) and [Sneha Singh](https://github.com/snehasingh2608).
