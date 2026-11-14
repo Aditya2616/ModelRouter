@@ -3,6 +3,8 @@
 [![CI](https://github.com/Aditya2616/ModelRouter/actions/workflows/ci.yml/badge.svg)](https://github.com/Aditya2616/ModelRouter/actions/workflows/ci.yml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
+By [Aditya Jain](https://adityajain16.vercel.app) and [Sneha Singh](https://github.com/snehasingh2608).
+
 Easy questions go to a small model, hard ones to a big model. A small scikit-learn classifier predicts, before any LLM runs, whether the cheap model will be good enough. An OpenAI-compatible gateway uses that score to route each request and keeps a ledger of what it saved.
 
 Measured: on RouterBench the router keeps 95% of the big model's quality at <!--v:a_op_cost-->37%<!--/v--> of the cost, but it does not transfer to unseen benchmark families, and on a local Qwen pair it does no better than random routing (see [Results](#results)).
@@ -275,4 +277,4 @@ tests/             fast offline tests (pytest -m slow adds two model tests)
 
 Code: MIT (see `LICENSE`). **RouterBench** (Hu et al., 2024): the dataset card on Hugging Face carries no licence, its code repository is MIT, and the data is not included here; it is downloaded at run time. Its prompts come from public benchmarks with their own licences. Also used: sentence-transformers `all-MiniLM-L6-v2` (Apache-2.0), Qwen2.5-0.5B-Instruct and Qwen2.5-1.5B-Instruct (Apache-2.0), ARC (CC-BY-SA-4.0), CommonsenseQA (MIT) and MMLU (MIT), as stated on their Hugging Face cards. Ideas and metrics from FrugalGPT, Hybrid LLM, AutoMix and RouteLLM (CPT and APGR); see `docs/notes/research.md`.
 
-Built by [Aditya Jain](https://adityajain16.vercel.app).
+Built by [Aditya Jain](https://adityajain16.vercel.app) and [Sneha Singh](https://github.com/snehasingh2608).
